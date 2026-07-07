@@ -26,7 +26,6 @@ internal static class ThemePicker
     private const int MinWidth = 26;
 
     /// <summary>Formats a colour as an uppercase `#RRGGBB` hex string for markup.</summary>
-    private static string ToHex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
     /// <summary>
     /// Opens the theme picker overlay. If one is already open it is closed instead (toggle),
@@ -57,8 +56,8 @@ internal static class ThemePicker
         foreach (var name in names)
         {
             var t = ws.ThemeRegistryService.GetTheme(name);
-            string primary = ToHex(t?.PrimaryColor ?? fallbackSwatch);
-            string secondary = ToHex(t?.SecondaryColor ?? fallbackSwatch);
+            string primary = Palette.ToHex(t?.PrimaryColor ?? fallbackSwatch);
+            string secondary = Palette.ToHex(t?.SecondaryColor ?? fallbackSwatch);
             string row = $"[{primary}]██[/][{secondary}]██[/] {name}";
             listBuilder.AddItem(row, tag: name);
         }

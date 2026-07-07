@@ -81,20 +81,27 @@ internal sealed class MonitorWindow
 
     private void OnThemeChanged(object? sender, SharpConsoleUI.Core.ThemeChangedEventArgs e)
     {
-        if (_window is null || _rebuilding)
-            return;
+        // ThemeStateService fires ThemeChanged on a ThreadPool thread, but recolouring rebuilds the
+        // control tree (ClearControls/AddControl) — structural mutation that must run on the UI thread
+        // to avoid racing the render loop. Marshal the whole rebuild onto the UI queue, which also
+        // serialises rapid live-preview switches (holding an arrow key) so two rebuilds never overlap.
+        _ws.EnqueueOnUIThread(() =>
+        {
+            if (_window is null || _rebuilding)
+                return;
 
-        _rebuilding = true;
-        try
-        {
-            _window.BackgroundColor = Palette.Current(_ws).Surface;
-            _window.ClearControls();
-            _window.AddControl(BuildContentFor(_mode));
-        }
-        finally
-        {
-            _rebuilding = false;
-        }
+            _rebuilding = true;
+            try
+            {
+                _window.BackgroundColor = Palette.Current(_ws).Surface;
+                _window.ClearControls();
+                _window.AddControl(BuildContentFor(_mode));
+            }
+            finally
+            {
+                _rebuilding = false;
+            }
+        });
     }
 
     private Window Build()
@@ -343,8 +350,8 @@ internal sealed class MonitorWindow
         var cur = _state.Current;
         Units u = _state.Units;
         var p = Palette.Current(_ws);
-        string downHex = ToHex(p.Download);
-        string upHex = ToHex(p.Upload);
+        string downHex = Palette.ToHex(p.Download);
+        string upHex = Palette.ToHex(p.Upload);
 
         string down = Format.Scale(cur.DownBytesPerSec, u);
         string up = Format.Scale(cur.UpBytesPerSec, u);
@@ -375,8 +382,8 @@ internal sealed class MonitorWindow
         var cur = _state.Current;
         Units u = _state.Units;
         var p = Palette.Current(_ws);
-        string downHex = ToHex(p.Download);
-        string upHex = ToHex(p.Upload);
+        string downHex = Palette.ToHex(p.Download);
+        string upHex = Palette.ToHex(p.Upload);
 
         string down = Format.Scale(cur.DownBytesPerSec, u);
         string up = Format.Scale(cur.UpBytesPerSec, u);
@@ -399,8 +406,8 @@ internal sealed class MonitorWindow
         var cur = _state.Current;
         Units u = _state.Units;
         var p = Palette.Current(_ws);
-        string downHex = ToHex(p.Download);
-        string upHex = ToHex(p.Upload);
+        string downHex = Palette.ToHex(p.Download);
+        string upHex = Palette.ToHex(p.Upload);
 
         string down = Format.Scale(cur.DownBytesPerSec, u);
         string up = Format.Scale(cur.UpBytesPerSec, u);
@@ -412,7 +419,6 @@ internal sealed class MonitorWindow
     }
 
     /// <summary>Formats a color as a "#RRGGBB" markup-color string.</summary>
-    private static string ToHex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
     private static string TrendArrow(double value, double peak)
     {

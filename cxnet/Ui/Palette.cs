@@ -15,4 +15,7 @@ public readonly record struct Palette(Color Download, Color Upload, Color Surfac
         Color muted = t?.InactiveBorderForegroundColor ?? new Color(70, 90, 120);
         return new Palette(download, upload, surface, muted, download);
     }
+
+    /// <summary>Formats a colour as a <c>#RRGGBB</c> hex string for use in markup tags.</summary>
+    public static string ToHex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 }
