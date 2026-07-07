@@ -71,9 +71,15 @@ internal static class ProcessPanel
         var surface = Palette.Current(ws).Surface;
         var background = new Color(surface.R, surface.G, surface.B, 205);
 
-        // Size to content: width depends on whether the process columns are shown; height tracks
+        // Size to content: width is the sum of the visible columns (each with a 1-col gap) plus the
+        // border + list margin + window padding, so the Process/PID columns aren't clipped.
+        // COLUMN_CHROME accounts for border (2) + list margin (2) + window padding (2).
         // the row count (+ chrome) but is capped so the list scrolls rather than overflowing.
-        int width = showProcess ? 66 : 46;
+        const int ColumnChrome = 9; // border + list margin + window padding + a column of slack
+        int contentCols = showProcess
+            ? RemoteWidth + 1 + StateWidth + 1 + CountWidth + 1 + ProcessWidth + 1 + PidWidth
+            : RemoteWidth + 1 + StateWidth + 1 + CountWidth;
+        int width = contentCols + ColumnChrome;
         int rowCount = connections.Count == 0 ? 1 : connections.Count + 1; // + header
         int height = Math.Clamp(rowCount + 4, 8, MaxRows + 6);
 

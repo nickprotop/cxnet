@@ -56,8 +56,8 @@ cxnet
 - **Session peaks & daily totals**, with automatic unit scaling (B/s → GB/s, or bits with `b`)
 - **Responsive display modes** — `hero`, `compact`, `mini`, `tiny` — that switch automatically as you resize the terminal (or cycle with `m`)
 - **Translucent overlays** — the theme picker and connections panel float over the live graphs, which keep animating *through* the panel (real alpha compositing)
-- **8 built-in themes** (plus the framework palette) — press `t` to browse
-- **Active connections panel** — press `n` to see live TCP connections
+- **Theme-aware** — press `t` for a swatch picker that live-previews as you arrow; the whole monitor (waveforms, stats, border, background) recolours to the selected theme, and `Esc` reverts
+- **Active connections panel** — press `n` to see live TCP connections, grouped by peer, with the owning process where it can be resolved
 - **Per-interface** monitoring with live switching (`i`); auto-selects the busiest interface
 - **Non-interactive modes** — `--json` and `--once` for scripts and status bars
 - **Cross-platform** — Linux, macOS, and Windows
