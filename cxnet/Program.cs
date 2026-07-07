@@ -72,6 +72,9 @@ internal static class Program
         var ws = new SharpConsoleUI.ConsoleWindowSystem(
             new SharpConsoleUI.Drivers.NetConsoleDriver(SharpConsoleUI.Drivers.RenderMode.Buffer));
 
+        // Register cxnet's palette themes so the 't' theme picker overlay can list/switch them.
+        Cxnet.Ui.Themes.RegisterThemes(ws);
+
         int intervalMs = opts.RefreshMs > 0 ? opts.RefreshMs : DefaultRefreshMs;
 
         // A --tiny/--mini/--compact flag sets the STARTING mode; a resize still overrides it (flow-style).

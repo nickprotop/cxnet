@@ -297,7 +297,7 @@ internal sealed class MonitorWindow
             $"[dim]latency[/] [grey]— ms[/]   " +
             $"[dim]units[/] {(u == Units.Bits ? "bits" : "bytes")}   " +
             $"[dim]interval[/] {_intervalMs} ms",
-            "[dim]q quit · r reset peaks · i iface · b bits/bytes · +/- interval[/]",
+            "[dim]q quit · r reset peaks · i iface · b bits/bytes · +/- interval · t themes · n conns[/]",
         };
     }
 
@@ -421,9 +421,15 @@ internal sealed class MonitorWindow
                 e.Handled = true;
                 break;
 
-            // t / n are display-mode toggles reserved for later tasks — no-op hooks for now.
+            // t → translucent theme picker; n → translucent connections overlay.
+            // Both toggle (a second press closes) and composite over the live waveforms.
             case 't':
+                ThemePicker.Show(_ws);
+                e.Handled = true;
+                break;
+
             case 'n':
+                ProcessPanel.Show(_ws);
                 e.Handled = true;
                 break;
         }
