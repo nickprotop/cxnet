@@ -106,15 +106,20 @@ internal sealed class MonitorWindow
     // A single graph carries BOTH series overlaid on one shared Y-scale: cool-blue download,
     // warm-orange upload. A fully-transparent background lets the window's translucent fill
     // and the desktop gradient show through the waveform area.
-    private static LineGraphControl NetGraph() => Controls.LineGraph()
-        .WithMode(LineGraphMode.Braille)
-        .WithMaxValue(GraphMaxBytesPerSec) // shared Y-scale for both series
-        .AddSeries("down", new Color(96, 165, 250), "cool")
-        .AddSeries("up", new Color(251, 146, 60), "warm")
+    // A bidirectional Braille sparkline: download grows UP, upload grows DOWN from a shared centre
+    // baseline (the natural shape for a network monitor). Fed via SetBidirectionalData each frame.
+    private static SparklineControl NetGraph() => Controls.Sparkline()
+        .WithMode(SparklineMode.BidirectionalBraille)
+        .WithMaxValue(GraphMaxBytesPerSec)          // download (primary, upward) scale
+        .WithSecondaryMaxValue(GraphMaxBytesPerSec)  // upload (secondary, downward) scale
+        .WithGradient(SharpConsoleUI.Helpers.ColorGradient.FromColors(
+            new Color(96, 165, 250), new Color(56, 125, 220)))   // download: cool blue
+        .WithSecondaryGradient(SharpConsoleUI.Helpers.ColorGradient.FromColors(
+            new Color(251, 146, 60), new Color(220, 110, 40)))   // upload: warm orange
         .WithBackgroundColor(new Color(0, 0, 0, 0)) // transparent — window/desktop shows through
-        .WithBaseline()
-        .WithHighLowLabels(true) // auto peak/low markers per series
+        .WithBaseline(true, position: TitlePosition.Bottom)
         .WithName("net")
+        .WithAlignment(HorizontalAlignment.Stretch)
         .WithVerticalAlignment(VerticalAlignment.Fill)
         .WithMargin(1, 0, 1, 0)
         .Build();
@@ -257,10 +262,17 @@ internal sealed class MonitorWindow
             _state.Add(s);
             _state.InterfaceName = _sampler.InterfaceName;
 
-            // One graph, both series: feed download + upload into the shared "net" control.
-            var g = window.FindControl<LineGraphControl>("net");
-            g?.AddDataPoint("down", s.DownBytesPerSec);
-            g?.AddDataPoint("up", s.UpBytesPerSec);
+            // Bidirectional sparkline: download upward (primary), upload downward (secondary), from the
+            // full recent history. Rescale each side to its own rolling peak so both stay readable.
+            var g = window.FindControl<SparklineControl>("net");
+            if (g != null)
+            {
+                double[] down = _state.DownHistory();
+                double[] up = _state.UpHistory();
+                g.SetBidirectionalData(down, up);
+                g.MaxValue = Math.Max(down.DefaultIfEmpty(0).Max(), 1024);          // ≥ 1 KB/s floor
+                g.SecondaryMaxValue = Math.Max(up.DefaultIfEmpty(0).Max(), 1024);
+            }
             window.FindControl<SparklineControl>("spark")?.AddDataPoint(s.DownBytesPerSec);
             window.FindControl<MarkupControl>("stats")?.SetContent(CurrentStatLines());
 
