@@ -242,8 +242,7 @@ internal sealed class MonitorWindow
     // the smaller modes shrink and anchor so they read like a compact widget / status strip.
     private static SharpConsoleUI.Layout.Placement PlacementFor(DisplayMode mode) => mode switch
     {
-        DisplayMode.Tiny => SharpConsoleUI.Layout.Placement.Anchor(
-            SharpConsoleUI.Layout.Anchor.Bottom, 48, 3, margin: 1),        // slim status strip
+        DisplayMode.Tiny => SharpConsoleUI.Layout.Placement.Center(48, 3),  // slim strip, centred
         DisplayMode.Mini => SharpConsoleUI.Layout.Placement.Center(
             SharpConsoleUI.Layout.SizePreset.Small),                        // compact graphs
         DisplayMode.Compact => SharpConsoleUI.Layout.Placement.Center(
