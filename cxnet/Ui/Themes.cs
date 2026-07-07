@@ -11,18 +11,20 @@ namespace Cxnet.Ui;
 /// </summary>
 internal static class Themes
 {
-    // Name → (Primary accent, Background surface). Distinct, cxnet-flavored palettes;
-    // the palette generator derives the full theme from just these two seeds.
-    private static readonly (string Name, string Description, string Primary, string Background)[] Palettes =
+    // Name → (Primary accent, Secondary accent, Background surface). Distinct, cxnet-flavored
+    // palettes; the palette generator derives the full theme from these seeds. Primary drives
+    // the download colour and Secondary the upload colour — the two are deliberately contrasting
+    // hues so up/down read apart at a glance.
+    private static readonly (string Name, string Description, string Primary, string Secondary, string Background)[] Palettes =
     {
-        ("Aqua",   "Cyan-teal accent on deep sea",     "#2DD4BF", "#0B1F2A"),
-        ("Ember",  "Warm ember orange on charcoal",    "#FB923C", "#1C1410"),
-        ("Forest", "Fresh green on forest floor",      "#4ADE80", "#0E1A12"),
-        ("Slate",  "Cool steel-blue on slate",         "#60A5FA", "#0F1620"),
-        ("Grape",  "Vivid violet on deep purple",      "#A78BFA", "#160E24"),
-        ("Rose",   "Soft rose-pink on wine",           "#FB7185", "#210E16"),
-        ("Gold",   "Amber gold on espresso",           "#FBBF24", "#1A1508"),
-        ("Mono",   "Neutral grey monochrome",          "#94A3B8", "#12161C"),
+        ("Aqua",   "Cyan-teal accent on deep sea",     "#22D3EE", "#FBBF24", "#0B1F2A"),
+        ("Ember",  "Warm ember orange on charcoal",    "#FB7185", "#38BDF8", "#1C1410"),
+        ("Forest", "Fresh green on forest floor",      "#34D399", "#F59E0B", "#0E1A12"),
+        ("Slate",  "Cool steel-blue on slate",         "#94A3B8", "#FCD34D", "#0F1620"),
+        ("Grape",  "Vivid violet on deep purple",      "#A78BFA", "#A3E635", "#160E24"),
+        ("Rose",   "Soft rose-pink on wine",           "#FB7185", "#2DD4BF", "#210E16"),
+        ("Gold",   "Amber gold on espresso",           "#FBBF24", "#60A5FA", "#1A1508"),
+        ("Mono",   "Neutral grey monochrome",          "#CBD5E1", "#F472B6", "#12161C"),
     };
 
     /// <summary>
@@ -32,20 +34,22 @@ internal static class Themes
     public static void RegisterThemes(ConsoleWindowSystem ws)
     {
         var existing = ws.ThemeRegistryService.GetAvailableThemeNames();
-        foreach (var (name, description, primary, background) in Palettes)
+        foreach (var (name, description, primary, secondary, background) in Palettes)
         {
             if (existing.Contains(name))
                 continue;
 
             // Capture locals for the factory closure.
             string p = primary;
+            string s = secondary;
             string b = background;
             ws.ThemeRegistryService.RegisterTheme(
                 name,
                 description,
-                () => Theme.FromPalette(new Palette
+                () => Theme.FromPalette(new SharpConsoleUI.Themes.Palette
                 {
                     Primary = Color.FromHex(p),
+                    Secondary = Color.FromHex(s),
                     Background = Color.FromHex(b),
                 }));
         }
