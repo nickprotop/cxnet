@@ -72,8 +72,23 @@ internal static class Program
         var ws = new SharpConsoleUI.ConsoleWindowSystem(
             new SharpConsoleUI.Drivers.NetConsoleDriver(SharpConsoleUI.Drivers.RenderMode.Buffer));
 
+        // Deep-ocean desktop background (vertical gradient + dot pattern) so the semi-transparent
+        // monitor window has something to composite against.
+        ws.DesktopBackground = new SharpConsoleUI.Rendering.DesktopBackgroundConfig
+        {
+            Gradient = new SharpConsoleUI.Rendering.GradientBackground(
+                SharpConsoleUI.Helpers.ColorGradient.FromColors(
+                    new SharpConsoleUI.Color(20, 60, 110), new SharpConsoleUI.Color(4, 10, 22)),
+                SharpConsoleUI.Rendering.GradientDirection.Vertical),
+            Pattern = SharpConsoleUI.Rendering.DesktopPatterns.Dots
+        };
+
         // Register cxnet's palette themes so the 't' theme picker overlay can list/switch them.
         Cxnet.Ui.Themes.RegisterThemes(ws);
+
+        // Keybinding hints live on the desktop's bottom status bar (not inside the window).
+        ws.PanelStateService.BottomStatus =
+            "[dim]q quit · m mode · t themes · n conns · r reset · i iface · b bits · +/- interval[/]";
 
         int intervalMs = opts.RefreshMs > 0 ? opts.RefreshMs : DefaultRefreshMs;
 

@@ -59,10 +59,10 @@ internal static class Format
         // Gradient stops: blue → cyan → green → yellow → red.
         (double pos, Color color)[] stops =
         {
-            (0.00, new Color(64, 128, 255)),  // cool blue (idle)
-            (0.30, new Color(0, 200, 220)),   // cyan
-            (0.55, new Color(60, 220, 90)),   // green
-            (0.80, new Color(240, 210, 40)),  // yellow
+            (0.00, new Color(46, 68, 104)),   // dim slate-blue (idle — muted)
+            (0.30, new Color(40, 130, 150)),  // muted cyan
+            (0.55, new Color(60, 190, 90)),   // green
+            (0.80, new Color(230, 200, 50)),  // yellow
             (1.00, new Color(240, 60, 50)),   // red (hot)
         };
 

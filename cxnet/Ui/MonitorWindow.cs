@@ -9,8 +9,8 @@ namespace Cxnet.Ui;
 
 /// <summary>
 /// The hero-mode monitor window: a large, rounded-border window showing live
-/// download/upload throughput as Braille <see cref="LineGraphControl"/> waveforms,
-/// a block <see cref="SparklineControl"/> history row, and a markup stat panel.
+/// download/upload throughput as a single dual-series Braille <see cref="LineGraphControl"/>
+/// waveform, a block <see cref="SparklineControl"/> history row, and a markup stat panel.
 /// The active border color tracks the current speed via <see cref="Format.SpeedColor"/>.
 /// </summary>
 /// <remarks>
@@ -27,6 +27,11 @@ internal sealed class MonitorWindow
     // Waveform vertical scale (bytes/sec). Auto-fit would flatten quiet periods, so we
     // pick a fixed, generous ceiling; bursts above it simply clip at the top.
     private const double GraphMaxBytesPerSec = 12 * 1024 * 1024; // ~12 MB/s full-scale
+
+    // Fixed stat-number colors — deliberately NOT speed-driven — matching the graph's
+    // down (cool blue) / up (warm orange) series so the numbers read as the same channels.
+    private const string DownHex = "#60A5FA";
+    private const string UpHex = "#FB923C";
 
     private readonly ConsoleWindowSystem _ws;
     private readonly NetworkSampler _sampler;
@@ -75,12 +80,16 @@ internal sealed class MonitorWindow
         var window = new WindowBuilder(_ws)
             .WithTitle($"cxnet · {_sampler.InterfaceName}")
             .WithName("cxnet")
+            // Rounded border, but no title bar or buttons — the waveforms carry the identity.
             .WithBorderStyle(BorderStyle.Rounded)
+            .HideTitle()
+            .HideTitleButtons()
             .WithSize(96, 34)
             .Centered()
-            // ALPHA showcase: a translucent deep-navy background (a < 255) so the
+            .Resizable(false)
+            // Semi-transparent (a < 255) so the desktop background shows through and the
             // waveforms read as glowing over a faded surface rather than a flat fill.
-            .WithBackgroundColor(new Color(10, 16, 28, 200))
+            .WithBackgroundColor(new Color(10, 16, 28, 140))
             .AddControl(BuildContentFor(_mode))
             .WithAsyncWindowThread(UpdateLoopAsync)
             .OnKeyPressed(OnKeyPressed)
@@ -90,30 +99,22 @@ internal sealed class MonitorWindow
     }
 
     // ── Reusable control factories ──────────────────────────────────────────────────
-    // Each mode composes a subset of these. Control NAMES are kept stable ("down"/"up"/
-    // "spark"/"stats") so the async feed's FindControl<T>(name)?. calls no-op gracefully
-    // when a control is absent in the current mode.
+    // Each mode composes a subset of these. Control NAMES are kept stable ("net"/"spark"/
+    // "stats") so the async feed's FindControl<T>(name)?. calls no-op gracefully when a
+    // control is absent in the current mode.
 
-    private static LineGraphControl DownGraph() => Controls.LineGraph()
-        .WithTitle("↓ Download", new Color(96, 165, 250))
+    // A single graph carries BOTH series overlaid on one shared Y-scale: cool-blue download,
+    // warm-orange upload. A fully-transparent background lets the window's translucent fill
+    // and the desktop gradient show through the waveform area.
+    private static LineGraphControl NetGraph() => Controls.LineGraph()
         .WithMode(LineGraphMode.Braille)
-        .WithMaxValue(GraphMaxBytesPerSec)
+        .WithMaxValue(GraphMaxBytesPerSec) // shared Y-scale for both series
         .AddSeries("down", new Color(96, 165, 250), "cool")
-        .WithYAxisLabels(false)
-        .WithBaseline()
-        .WithName("down")
-        .WithVerticalAlignment(VerticalAlignment.Fill)
-        .WithMargin(1, 0, 1, 0)
-        .Build();
-
-    private static LineGraphControl UpGraph() => Controls.LineGraph()
-        .WithTitle("↑ Upload", new Color(251, 146, 60))
-        .WithMode(LineGraphMode.Braille)
-        .WithMaxValue(GraphMaxBytesPerSec)
         .AddSeries("up", new Color(251, 146, 60), "warm")
-        .WithYAxisLabels(false)
+        .WithBackgroundColor(new Color(0, 0, 0, 0)) // transparent — window/desktop shows through
         .WithBaseline()
-        .WithName("up")
+        .WithHighLowLabels(true) // auto peak/low markers per series
+        .WithName("net")
         .WithVerticalAlignment(VerticalAlignment.Fill)
         .WithMargin(1, 0, 1, 0)
         .Build();
@@ -122,6 +123,7 @@ internal sealed class MonitorWindow
         .WithMode(SparklineMode.Block)
         .WithHeight(3)
         .WithMaxValue(GraphMaxBytesPerSec)
+        .WithBackgroundColor(new Color(0, 0, 0, 0)) // transparent — window/desktop shows through
         .WithName("spark")
         .WithMargin(1, 0, 1, 0)
         .Build();
@@ -149,46 +151,44 @@ internal sealed class MonitorWindow
                 return Stats(TinyStatLines());
 
             case DisplayMode.Mini:
-                // Graphs only — both waveforms, no header/stats/footer.
+                // Graph only — the single dual-series waveform, no header/stats/footer.
                 return Controls.Grid()
                     .Columns(GridLength.Star(1))
-                    .Rows(GridLength.Star(1), GridLength.Star(1))
+                    .Rows(GridLength.Star(1))
                     .RowGap(1)
                     .WithPadding(1, 0, 1, 0)
                     .WithVerticalAlignment(VerticalAlignment.Fill)
                     .WithAlignment(HorizontalAlignment.Stretch)
-                    .Place(DownGraph(), 0, 0)
-                    .Place(UpGraph(), 1, 0)
+                    .Place(NetGraph(), 0, 0)
                     .Build();
 
             case DisplayMode.Compact:
-                // Title row + both waveforms + a condensed stat line. No sparkline/footer.
+                // Dual-series waveform + a condensed stat line. No sparkline/footer.
                 return Controls.Grid()
                     .Columns(GridLength.Star(1))
-                    .Rows(GridLength.Star(3), GridLength.Star(3), GridLength.Auto())
+                    .Rows(GridLength.Star(1), GridLength.Auto())
                     .RowGap(1)
                     .WithPadding(1, 0, 1, 0)
                     .WithVerticalAlignment(VerticalAlignment.Fill)
                     .WithAlignment(HorizontalAlignment.Stretch)
-                    .Place(DownGraph(), 0, 0)
-                    .Place(UpGraph(), 1, 0)
-                    .Place(Stats(CompactStatLines()), 2, 0)
+                    .Place(NetGraph(), 0, 0)
+                    .Place(Stats(CompactStatLines()), 1, 0)
                     .Build();
 
             case DisplayMode.Hero:
             default:
-                // Full layout: both waveforms + sparkline + full stat panel + keybinding footer.
+                // Full layout: dual-series waveform + sparkline + full stat panel.
+                // Keybinding hints live on the desktop's bottom status bar, not in-window.
                 return Controls.Grid()
                     .Columns(GridLength.Star(1))
-                    .Rows(GridLength.Star(3), GridLength.Star(3), GridLength.Auto(), GridLength.Auto())
+                    .Rows(GridLength.Star(1), GridLength.Auto(), GridLength.Auto())
                     .RowGap(1)
                     .WithPadding(1, 0, 1, 0)
                     .WithVerticalAlignment(VerticalAlignment.Fill)
                     .WithAlignment(HorizontalAlignment.Stretch)
-                    .Place(DownGraph(), 0, 0)
-                    .Place(UpGraph(), 1, 0)
-                    .Place(Spark(), 2, 0)
-                    .Place(Stats(BuildStatLines()), 3, 0)
+                    .Place(NetGraph(), 0, 0)
+                    .Place(Spark(), 1, 0)
+                    .Place(Stats(BuildStatLines()), 2, 0)
                     .Build();
         }
     }
@@ -237,8 +237,8 @@ internal sealed class MonitorWindow
 
     /// <summary>
     /// Async feed: every <see cref="_intervalMs"/> ms takes a sample, records it in state,
-    /// pushes it into the two waveforms + sparkline, refreshes the stat markup, and drives
-    /// the active border color from the faster of the two rates.
+    /// pushes both series into the dual-series graph + sparkline, refreshes the stat markup,
+    /// and drives the active border color from the faster of the two rates.
     /// </summary>
     private async Task UpdateLoopAsync(Window window, CancellationToken ct)
     {
@@ -257,8 +257,10 @@ internal sealed class MonitorWindow
             _state.Add(s);
             _state.InterfaceName = _sampler.InterfaceName;
 
-            window.FindControl<LineGraphControl>("down")?.AddDataPoint("down", s.DownBytesPerSec);
-            window.FindControl<LineGraphControl>("up")?.AddDataPoint("up", s.UpBytesPerSec);
+            // One graph, both series: feed download + upload into the shared "net" control.
+            var g = window.FindControl<LineGraphControl>("net");
+            g?.AddDataPoint("down", s.DownBytesPerSec);
+            g?.AddDataPoint("up", s.UpBytesPerSec);
             window.FindControl<SparklineControl>("spark")?.AddDataPoint(s.DownBytesPerSec);
             window.FindControl<MarkupControl>("stats")?.SetContent(CurrentStatLines());
 
@@ -284,20 +286,16 @@ internal sealed class MonitorWindow
         string downArrow = TrendArrow(cur.DownBytesPerSec, _state.PeakDown);
         string upArrow = TrendArrow(cur.UpBytesPerSec, _state.PeakUp);
 
-        string downHex = ToHex(Format.SpeedColor(cur.DownBytesPerSec));
-        string upHex = ToHex(Format.SpeedColor(cur.UpBytesPerSec));
-
         return new List<string>
         {
-            $"[bold]↓[/] [{downHex}]{down,-12}[/] {downArrow}   " +
-            $"[bold]↑[/] [{upHex}]{up,-12}[/] {upArrow}",
+            $"[bold]↓[/] [{DownHex}]{down,-12}[/] {downArrow}   " +
+            $"[bold]↑[/] [{UpHex}]{up,-12}[/] {upArrow}",
             $"[dim]peak[/]  ↓ {peakDown,-12} ↑ {peakUp,-12}",
             $"[dim]total[/] ↓ {totalDown,-12} ↑ {totalUp,-12}",
             $"[dim]iface[/] [cyan]{_state.InterfaceName}[/]   " +
             $"[dim]latency[/] [grey]— ms[/]   " +
             $"[dim]units[/] {(u == Units.Bits ? "bits" : "bytes")}   " +
             $"[dim]interval[/] {_intervalMs} ms",
-            "[dim]q quit · r reset peaks · i iface · b bits/bytes · +/- interval · t themes · n conns[/]",
         };
     }
 
@@ -314,12 +312,9 @@ internal sealed class MonitorWindow
         string totalDown = FormatTotalBytes(_state.TotalDownBytes);
         string totalUp = FormatTotalBytes(_state.TotalUpBytes);
 
-        string downHex = ToHex(Format.SpeedColor(cur.DownBytesPerSec));
-        string upHex = ToHex(Format.SpeedColor(cur.UpBytesPerSec));
-
         return new List<string>
         {
-            $"[bold]↓[/] [{downHex}]{down,-12}[/] [bold]↑[/] [{upHex}]{up,-12}[/] " +
+            $"[bold]↓[/] [{DownHex}]{down,-12}[/] [bold]↑[/] [{UpHex}]{up,-12}[/] " +
             $"[dim]peak[/] ↓ {peakDown,-10} ↑ {peakUp,-10} " +
             $"[dim]total[/] ↓ {totalDown,-9} ↑ {totalUp,-9}",
         };
@@ -333,12 +328,10 @@ internal sealed class MonitorWindow
 
         string down = Format.Scale(cur.DownBytesPerSec, u);
         string up = Format.Scale(cur.UpBytesPerSec, u);
-        string downHex = ToHex(Format.SpeedColor(cur.DownBytesPerSec));
-        string upHex = ToHex(Format.SpeedColor(cur.UpBytesPerSec));
 
         return new List<string>
         {
-            $"[bold]↓[/] [{downHex}]{down}[/]  [bold]↑[/] [{upHex}]{up}[/]",
+            $"[bold]↓[/] [{DownHex}]{down}[/]  [bold]↑[/] [{UpHex}]{up}[/]",
         };
     }
 
@@ -352,8 +345,6 @@ internal sealed class MonitorWindow
             return "[yellow]▴[/]";
         return "[green]▾[/]";
     }
-
-    private static string ToHex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
     private static string FormatTotalBytes(double bytes)
     {
