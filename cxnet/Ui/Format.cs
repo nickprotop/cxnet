@@ -52,14 +52,14 @@ internal static class Format
     /// cyan/green/yellow to red at high speed. Uses a log scale between an idle
     /// floor and a ~50 MB/s ceiling. Used for the window border and throughput text.
     /// </summary>
-    public static Color SpeedColor(double bytesPerSec)
+    public static Color SpeedColor(double bytesPerSec, Color idle)
     {
         double t = Normalize(bytesPerSec);
 
-        // Gradient stops: blue → cyan → green → yellow → red.
+        // Gradient stops: theme-seeded idle → cyan → green → yellow → red.
         (double pos, Color color)[] stops =
         {
-            (0.00, new Color(46, 68, 104)),   // dim slate-blue (idle — muted)
+            (0.00, idle),                     // theme accent (idle — muted)
             (0.30, new Color(40, 130, 150)),  // muted cyan
             (0.55, new Color(60, 190, 90)),   // green
             (0.80, new Color(230, 200, 50)),  // yellow

@@ -3,6 +3,7 @@ using Cxnet.State;
 using SharpConsoleUI;
 using SharpConsoleUI.Builders;
 using SharpConsoleUI.Controls;
+using SharpConsoleUI.Helpers;
 using SharpConsoleUI.Layout;
 
 namespace Cxnet.Ui;
@@ -31,11 +32,6 @@ internal sealed class MonitorWindow
     // The bidirectional waveform's height in rows (large — the graph is the centrepiece).
     // Split evenly: ~half above the baseline (download), ~half below (upload).
     private const int GraphHeight = 20;
-
-    // Fixed stat-number colors — deliberately NOT speed-driven — matching the graph's
-    // down (cool blue) / up (warm orange) series so the numbers read as the same channels.
-    private const string DownHex = "#60A5FA";
-    private const string UpHex = "#FB923C";
 
     private readonly ConsoleWindowSystem _ws;
     private readonly NetworkSampler _sampler;
@@ -77,6 +73,28 @@ internal sealed class MonitorWindow
         // Auto-switch layout modes when the terminal is resized. WindowResized fires on the UI
         // thread after the framework has repositioned windows, so mutating controls here is safe.
         _ws.WindowResized += OnWindowResized;
+
+        // Re-theme the whole monitor when the active theme changes (graph hues, stat numbers,
+        // window background, idle border all resolve from the Palette).
+        _ws.ThemeStateService.ThemeChanged += OnThemeChanged;
+    }
+
+    private void OnThemeChanged(object? sender, SharpConsoleUI.Core.ThemeChangedEventArgs e)
+    {
+        if (_window is null || _rebuilding)
+            return;
+
+        _rebuilding = true;
+        try
+        {
+            _window.BackgroundColor = Palette.Current(_ws).Surface;
+            _window.ClearControls();
+            _window.AddControl(BuildContentFor(_mode));
+        }
+        finally
+        {
+            _rebuilding = false;
+        }
     }
 
     private Window Build()
@@ -94,7 +112,7 @@ internal sealed class MonitorWindow
             .Resizable(false)
             // Semi-transparent (a < 255) so the desktop background shows through and the
             // waveforms read as glowing over a faded surface rather than a flat fill.
-            .WithBackgroundColor(new Color(10, 16, 28, 140))
+            .WithBackgroundColor(Palette.Current(_ws).Surface)
             .AddControl(BuildContentFor(_mode))
             .WithAsyncWindowThread(UpdateLoopAsync)
             .OnKeyPressed(OnKeyPressed)
@@ -113,16 +131,19 @@ internal sealed class MonitorWindow
     // and the desktop gradient show through the waveform area.
     // A bidirectional Braille sparkline: download grows UP, upload grows DOWN from a shared centre
     // baseline (the natural shape for a network monitor). Fed via SetBidirectionalData each frame.
-    private static SparklineControl NetGraph() => Controls.Sparkline()
+    private SparklineControl NetGraph()
+    {
+        var p = Palette.Current(_ws);
+        return Controls.Sparkline()
         .WithMode(SparklineMode.BidirectionalBraille)
         .WithMaxValue(GraphMaxBytesPerSec)          // download (primary, upward) scale
         .WithSecondaryMaxValue(GraphMaxBytesPerSec)  // upload (secondary, downward) scale
         // Per-height gradient (vertical colour interpolation): dim near the centre baseline,
-        // bright at the peaks — so amplitude reads as glow.
+        // bright at the peaks — so amplitude reads as glow. Hues resolve from the active theme.
         .WithGradient(SharpConsoleUI.Helpers.ColorGradient.FromColors(
-            new Color(40, 78, 130), new Color(120, 190, 255)))   // download: dim → bright blue
+            p.Download.Shade(0.5), p.Download))      // download: dim → bright (theme primary)
         .WithSecondaryGradient(SharpConsoleUI.Helpers.ColorGradient.FromColors(
-            new Color(150, 74, 26), new Color(255, 170, 90)))    // upload: dim → bright orange
+            p.Upload.Shade(0.5), p.Upload))          // upload: dim → bright (theme secondary)
         .WithBackgroundColor(new Color(0, 0, 0, 0)) // transparent — window/desktop shows through
         .WithBaseline(true, position: TitlePosition.Bottom)
         .WithHeight(GraphHeight)                    // large: the centrepiece
@@ -131,6 +152,7 @@ internal sealed class MonitorWindow
         .WithAlignment(HorizontalAlignment.Stretch)
         .WithMargin(1, 0, 1, 0)
         .Build();
+    }
 
     private static SparklineControl Spark() => Controls.Sparkline()
         .WithMode(SparklineMode.Block)
@@ -202,7 +224,7 @@ internal sealed class MonitorWindow
                     .WithAlignment(HorizontalAlignment.Stretch)
                     // row 0: flexible top spacer (empty)
                     .Place(NetGraph(), 1, 0)                 // row 1: the graph (Auto = its own height)
-                    // row 2: flexible bottom spacer (empty)
+                                                             // row 2: flexible bottom spacer (empty)
                     .Place(Stats(BuildStatLines()), 3, 0)    // row 3: stats pinned at bottom
                     .Build();
         }
@@ -312,7 +334,7 @@ internal sealed class MonitorWindow
             // ActiveBorderForegroundColor is a self-invalidating Window property setter;
             // per the MetricsWindow feed pattern it is safe to set from this thread.
             window.ActiveBorderForegroundColor =
-                Format.SpeedColor(Math.Max(s.DownBytesPerSec, s.UpBytesPerSec));
+                Format.SpeedColor(Math.Max(s.DownBytesPerSec, s.UpBytesPerSec), Palette.Current(_ws).Accent);
         }
     }
 
@@ -320,6 +342,9 @@ internal sealed class MonitorWindow
     {
         var cur = _state.Current;
         Units u = _state.Units;
+        var p = Palette.Current(_ws);
+        string downHex = ToHex(p.Download);
+        string upHex = ToHex(p.Upload);
 
         string down = Format.Scale(cur.DownBytesPerSec, u);
         string up = Format.Scale(cur.UpBytesPerSec, u);
@@ -333,8 +358,8 @@ internal sealed class MonitorWindow
 
         return new List<string>
         {
-            $"[bold]↓[/] [{DownHex}]{down,-12}[/] {downArrow}   " +
-            $"[bold]↑[/] [{UpHex}]{up,-12}[/] {upArrow}",
+            $"[bold]↓[/] [{downHex}]{down,-12}[/] {downArrow}   " +
+            $"[bold]↑[/] [{upHex}]{up,-12}[/] {upArrow}",
             $"[dim]peak[/]  ↓ {peakDown,-12} ↑ {peakUp,-12}",
             $"[dim]total[/] ↓ {totalDown,-12} ↑ {totalUp,-12}",
             $"[dim]iface[/] [cyan]{_state.InterfaceName}[/]   " +
@@ -349,6 +374,9 @@ internal sealed class MonitorWindow
     {
         var cur = _state.Current;
         Units u = _state.Units;
+        var p = Palette.Current(_ws);
+        string downHex = ToHex(p.Download);
+        string upHex = ToHex(p.Upload);
 
         string down = Format.Scale(cur.DownBytesPerSec, u);
         string up = Format.Scale(cur.UpBytesPerSec, u);
@@ -359,7 +387,7 @@ internal sealed class MonitorWindow
 
         return new List<string>
         {
-            $"[bold]↓[/] [{DownHex}]{down,-12}[/] [bold]↑[/] [{UpHex}]{up,-12}[/] " +
+            $"[bold]↓[/] [{downHex}]{down,-12}[/] [bold]↑[/] [{upHex}]{up,-12}[/] " +
             $"[dim]peak[/] ↓ {peakDown,-10} ↑ {peakUp,-10} " +
             $"[dim]total[/] ↓ {totalDown,-9} ↑ {totalUp,-9}",
         };
@@ -370,15 +398,21 @@ internal sealed class MonitorWindow
     {
         var cur = _state.Current;
         Units u = _state.Units;
+        var p = Palette.Current(_ws);
+        string downHex = ToHex(p.Download);
+        string upHex = ToHex(p.Upload);
 
         string down = Format.Scale(cur.DownBytesPerSec, u);
         string up = Format.Scale(cur.UpBytesPerSec, u);
 
         return new List<string>
         {
-            $"[bold]↓[/] [{DownHex}]{down}[/]  [bold]↑[/] [{UpHex}]{up}[/]",
+            $"[bold]↓[/] [{downHex}]{down}[/]  [bold]↑[/] [{upHex}]{up}[/]",
         };
     }
+
+    /// <summary>Formats a color as a "#RRGGBB" markup-color string.</summary>
+    private static string ToHex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
     private static string TrendArrow(double value, double peak)
     {
