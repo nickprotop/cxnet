@@ -28,6 +28,10 @@ internal sealed class MonitorWindow
     // pick a fixed, generous ceiling; bursts above it simply clip at the top.
     private const double GraphMaxBytesPerSec = 12 * 1024 * 1024; // ~12 MB/s full-scale
 
+    // The bidirectional waveform's height in rows (large — the graph is the centrepiece).
+    // Split evenly: ~half above the baseline (download), ~half below (upload).
+    private const int GraphHeight = 20;
+
     // Fixed stat-number colors — deliberately NOT speed-driven — matching the graph's
     // down (cool blue) / up (warm orange) series so the numbers read as the same channels.
     private const string DownHex = "#60A5FA";
@@ -84,8 +88,9 @@ internal sealed class MonitorWindow
             .WithBorderStyle(BorderStyle.Rounded)
             .HideTitle()
             .HideTitleButtons()
-            .WithSize(96, 34)
-            .Centered()
+            // Declarative placement sized for the current mode, resolved by the framework's
+            // WindowPlacementService (and re-resolved automatically on desktop resize).
+            .WithPlacement(PlacementFor(_mode))
             .Resizable(false)
             // Semi-transparent (a < 255) so the desktop background shows through and the
             // waveforms read as glowing over a faded surface rather than a flat fill.
@@ -112,15 +117,18 @@ internal sealed class MonitorWindow
         .WithMode(SparklineMode.BidirectionalBraille)
         .WithMaxValue(GraphMaxBytesPerSec)          // download (primary, upward) scale
         .WithSecondaryMaxValue(GraphMaxBytesPerSec)  // upload (secondary, downward) scale
+        // Per-height gradient (vertical colour interpolation): dim near the centre baseline,
+        // bright at the peaks — so amplitude reads as glow.
         .WithGradient(SharpConsoleUI.Helpers.ColorGradient.FromColors(
-            new Color(96, 165, 250), new Color(56, 125, 220)))   // download: cool blue
+            new Color(40, 78, 130), new Color(120, 190, 255)))   // download: dim → bright blue
         .WithSecondaryGradient(SharpConsoleUI.Helpers.ColorGradient.FromColors(
-            new Color(251, 146, 60), new Color(220, 110, 40)))   // upload: warm orange
+            new Color(150, 74, 26), new Color(255, 170, 90)))    // upload: dim → bright orange
         .WithBackgroundColor(new Color(0, 0, 0, 0)) // transparent — window/desktop shows through
         .WithBaseline(true, position: TitlePosition.Bottom)
+        .WithHeight(GraphHeight)                    // large: the centrepiece
+        .WithAutoFitDataPoints(true)                // resample to fill the full graph width
         .WithName("net")
         .WithAlignment(HorizontalAlignment.Stretch)
-        .WithVerticalAlignment(VerticalAlignment.Fill)
         .WithMargin(1, 0, 1, 0)
         .Build();
 
@@ -182,18 +190,20 @@ internal sealed class MonitorWindow
 
             case DisplayMode.Hero:
             default:
-                // Full layout: dual-series waveform + sparkline + full stat panel.
-                // Keybinding hints live on the desktop's bottom status bar, not in-window.
+                // Full layout: the dual-flow waveform floats CENTRED (a flexible spacer above and
+                // below), with the stat panel pinned at the bottom. Keybinding hints live on the
+                // desktop's bottom status bar, not in-window.
                 return Controls.Grid()
                     .Columns(GridLength.Star(1))
-                    .Rows(GridLength.Star(1), GridLength.Auto(), GridLength.Auto())
+                    .Rows(GridLength.Star(1), GridLength.Auto(), GridLength.Star(1), GridLength.Auto())
                     .RowGap(1)
                     .WithPadding(1, 0, 1, 0)
                     .WithVerticalAlignment(VerticalAlignment.Fill)
                     .WithAlignment(HorizontalAlignment.Stretch)
-                    .Place(NetGraph(), 0, 0)
-                    .Place(Spark(), 1, 0)
-                    .Place(Stats(BuildStatLines()), 2, 0)
+                    // row 0: flexible top spacer (empty)
+                    .Place(NetGraph(), 1, 0)                 // row 1: the graph (Auto = its own height)
+                    // row 2: flexible bottom spacer (empty)
+                    .Place(Stats(BuildStatLines()), 3, 0)    // row 3: stats pinned at bottom
                     .Build();
         }
     }
@@ -203,7 +213,12 @@ internal sealed class MonitorWindow
     /// controls and re-adding a freshly-built root. The window shell (and its async feed thread)
     /// is preserved; the feed re-finds controls by name after the swap. Re-entrant-safe.
     /// </summary>
-    private void SwitchMode(DisplayMode mode)
+    /// <summary>
+    /// Switches the display mode and rebuilds the content for it. When <paramref name="applyPlacement"/>
+    /// is true (a manual `m` cycle) the window is also resized to the mode's placement; when false (the
+    /// mode was derived from a resize that already sized the window) the content is just rebuilt to fit.
+    /// </summary>
+    private void SwitchMode(DisplayMode mode, bool applyPlacement)
     {
         if (_window is null || mode == _mode || _rebuilding)
             return;
@@ -214,12 +229,28 @@ internal sealed class MonitorWindow
             _mode = mode;
             _window.ClearControls();
             _window.AddControl(BuildContentFor(_mode));
+            if (applyPlacement)
+                _window.Placement = PlacementFor(_mode);
         }
         finally
         {
             _rebuilding = false;
         }
     }
+
+    // Each display mode gets a placement sized to its content: the full monitor is large and centred;
+    // the smaller modes shrink and anchor so they read like a compact widget / status strip.
+    private static SharpConsoleUI.Layout.Placement PlacementFor(DisplayMode mode) => mode switch
+    {
+        DisplayMode.Tiny => SharpConsoleUI.Layout.Placement.Anchor(
+            SharpConsoleUI.Layout.Anchor.Bottom, 48, 3, margin: 1),        // slim status strip
+        DisplayMode.Mini => SharpConsoleUI.Layout.Placement.Center(
+            SharpConsoleUI.Layout.SizePreset.Small),                        // compact graphs
+        DisplayMode.Compact => SharpConsoleUI.Layout.Placement.Center(
+            SharpConsoleUI.Layout.SizePreset.Medium),
+        _ => SharpConsoleUI.Layout.Placement.Center(
+            SharpConsoleUI.Layout.SizePreset.Large),                        // hero: the centrepiece
+    };
 
     private static DisplayMode NextMode(DisplayMode mode) => mode switch
     {
@@ -234,10 +265,13 @@ internal sealed class MonitorWindow
         if (_window is null)
             return;
 
-        var d = _ws.DesktopDimensions;
-        var newMode = DisplayModeResolver.Resolve(d.Width, d.Height);
+        // The framework has already re-resolved the window's placement against the new desktop, so
+        // _window.Width/Height are current. Pick the mode from the WINDOW's actual size (not the
+        // desktop) — the content adapts to the window it's really in — and rebuild content only (the
+        // window is already sized; don't re-place it and fight the framework's resize).
+        var newMode = DisplayModeResolver.Resolve(_window.Width, _window.Height);
         if (newMode != _mode)
-            SwitchMode(newMode);
+            SwitchMode(newMode, applyPlacement: false);
     }
 
     /// <summary>
@@ -417,10 +451,10 @@ internal sealed class MonitorWindow
                 e.Handled = true;
                 break;
 
-            // m cycles the display mode manually (Hero → Compact → Mini → Tiny → Hero),
-            // overriding the auto mode until the next resize re-resolves from the desktop size.
+            // m cycles the display mode manually (Hero → Compact → Mini → Tiny → Hero) and resizes
+            // the window to match — a deliberate size choice (applyPlacement: true).
             case 'm':
-                SwitchMode(NextMode(_mode));
+                SwitchMode(NextMode(_mode), applyPlacement: true);
                 e.Handled = true;
                 break;
 

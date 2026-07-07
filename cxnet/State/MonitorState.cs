@@ -18,8 +18,12 @@ public enum Units
 /// </summary>
 public sealed class MonitorState
 {
-    /// <summary>Number of samples retained for graph history.</summary>
-    public const int HistorySize = 120;
+    /// <summary>
+    /// Number of samples retained for graph history. Large enough to fill the full pixel-width of the
+    /// waveform even in a wide window (Braille packs 2 columns per cell, so a ~120-col window needs
+    /// ~240 points); a bigger ring just means the graph scrolls older data off the left.
+    /// </summary>
+    public const int HistorySize = 512;
 
     private readonly NetSample[] _ring = new NetSample[HistorySize];
     private int _head;   // index of the next write slot
