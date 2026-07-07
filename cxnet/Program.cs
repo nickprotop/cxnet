@@ -73,7 +73,15 @@ internal static class Program
             new SharpConsoleUI.Drivers.NetConsoleDriver(SharpConsoleUI.Drivers.RenderMode.Buffer));
 
         int intervalMs = opts.RefreshMs > 0 ? opts.RefreshMs : DefaultRefreshMs;
-        var monitor = new Cxnet.Ui.MonitorWindow(ws, sampler, state, intervalMs, opts.Bits);
+
+        // A --tiny/--mini/--compact flag sets the STARTING mode; a resize still overrides it (flow-style).
+        Cxnet.Ui.DisplayMode? initialMode =
+            opts.Tiny ? Cxnet.Ui.DisplayMode.Tiny :
+            opts.Mini ? Cxnet.Ui.DisplayMode.Mini :
+            opts.Compact ? Cxnet.Ui.DisplayMode.Compact :
+            null;
+
+        var monitor = new Cxnet.Ui.MonitorWindow(ws, sampler, state, intervalMs, opts.Bits, initialMode);
         monitor.Show();
 
         return ws.Run();

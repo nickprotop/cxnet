@@ -35,7 +35,12 @@ internal sealed class MonitorWindow
     private int _intervalMs;
     private Window? _window;
 
-    public MonitorWindow(ConsoleWindowSystem ws, NetworkSampler sampler, MonitorState state, int intervalMs, bool bits)
+    // Current responsive layout mode. Auto-switches on resize; the 'm' key cycles it manually
+    // (that override holds until the next resize, which re-resolves from the desktop size).
+    private DisplayMode _mode;
+    private bool _rebuilding; // re-entrancy guard: a resize firing mid-rebuild must not recurse.
+
+    public MonitorWindow(ConsoleWindowSystem ws, NetworkSampler sampler, MonitorState state, int intervalMs, bool bits, DisplayMode? initialMode = null)
     {
         _ws = ws ?? throw new ArgumentNullException(nameof(ws));
         _sampler = sampler ?? throw new ArgumentNullException(nameof(sampler));
@@ -43,6 +48,11 @@ internal sealed class MonitorWindow
         _intervalMs = Math.Clamp(intervalMs > 0 ? intervalMs : 100, MinIntervalMs, MaxIntervalMs);
         _state.Units = bits ? Units.Bits : Units.Bytes;
         _state.InterfaceName = _sampler.InterfaceName;
+
+        // A CLI flag (--tiny/--mini/--compact) pins the initial mode; otherwise resolve from
+        // the current desktop size. A subsequent resize re-resolves either way.
+        var d = _ws.DesktopDimensions;
+        _mode = initialMode ?? DisplayModeResolver.Resolve(d.Width, d.Height);
     }
 
     /// <summary>The built window.</summary>
@@ -54,65 +64,14 @@ internal sealed class MonitorWindow
         _window ??= Build();
         _ws.AddWindow(_window);
         _ws.SetActiveWindow(_window);
+
+        // Auto-switch layout modes when the terminal is resized. WindowResized fires on the UI
+        // thread after the framework has repositioned windows, so mutating controls here is safe.
+        _ws.WindowResized += OnWindowResized;
     }
 
     private Window Build()
     {
-        // ── Download waveform (Braille, cool gradient) ──────────────────────────────
-        var downGraph = Controls.LineGraph()
-            .WithTitle("↓ Download", new Color(96, 165, 250))
-            .WithMode(LineGraphMode.Braille)
-            .WithMaxValue(GraphMaxBytesPerSec)
-            .AddSeries("down", new Color(96, 165, 250), "cool")
-            .WithYAxisLabels(false)
-            .WithBaseline()
-            .WithName("down")
-            .WithVerticalAlignment(VerticalAlignment.Fill)
-            .WithMargin(1, 0, 1, 0)
-            .Build();
-
-        // ── Upload waveform (Braille, warm gradient) ────────────────────────────────
-        var upGraph = Controls.LineGraph()
-            .WithTitle("↑ Upload", new Color(251, 146, 60))
-            .WithMode(LineGraphMode.Braille)
-            .WithMaxValue(GraphMaxBytesPerSec)
-            .AddSeries("up", new Color(251, 146, 60), "warm")
-            .WithYAxisLabels(false)
-            .WithBaseline()
-            .WithName("up")
-            .WithVerticalAlignment(VerticalAlignment.Fill)
-            .WithMargin(1, 0, 1, 0)
-            .Build();
-
-        // ── History sparkline row ───────────────────────────────────────────────────
-        var spark = Controls.Sparkline()
-            .WithMode(SparklineMode.Block)
-            .WithHeight(3)
-            .WithMaxValue(GraphMaxBytesPerSec)
-            .WithName("spark")
-            .WithMargin(1, 0, 1, 0)
-            .Build();
-
-        // ── Stat panel (markup, live via SetContent) ────────────────────────────────
-        var stats = Controls.Markup(string.Empty)
-            .WithName("stats")
-            .WithMargin(1, 0, 1, 0)
-            .Build();
-        stats.SetContent(BuildStatLines());
-
-        var grid = Controls.Grid()
-            .Columns(GridLength.Star(1))
-            .Rows(GridLength.Star(3), GridLength.Star(3), GridLength.Auto(), GridLength.Auto())
-            .RowGap(1)
-            .WithPadding(1, 0, 1, 0)
-            .WithVerticalAlignment(VerticalAlignment.Fill)
-            .WithAlignment(HorizontalAlignment.Stretch)
-            .Place(downGraph, 0, 0)
-            .Place(upGraph, 1, 0)
-            .Place(spark, 2, 0)
-            .Place(stats, 3, 0)
-            .Build();
-
         var window = new WindowBuilder(_ws)
             .WithTitle($"cxnet · {_sampler.InterfaceName}")
             .WithName("cxnet")
@@ -122,12 +81,158 @@ internal sealed class MonitorWindow
             // ALPHA showcase: a translucent deep-navy background (a < 255) so the
             // waveforms read as glowing over a faded surface rather than a flat fill.
             .WithBackgroundColor(new Color(10, 16, 28, 200))
-            .AddControl(grid)
+            .AddControl(BuildContentFor(_mode))
             .WithAsyncWindowThread(UpdateLoopAsync)
             .OnKeyPressed(OnKeyPressed)
             .Build();
 
         return window;
+    }
+
+    // ── Reusable control factories ──────────────────────────────────────────────────
+    // Each mode composes a subset of these. Control NAMES are kept stable ("down"/"up"/
+    // "spark"/"stats") so the async feed's FindControl<T>(name)?. calls no-op gracefully
+    // when a control is absent in the current mode.
+
+    private static LineGraphControl DownGraph() => Controls.LineGraph()
+        .WithTitle("↓ Download", new Color(96, 165, 250))
+        .WithMode(LineGraphMode.Braille)
+        .WithMaxValue(GraphMaxBytesPerSec)
+        .AddSeries("down", new Color(96, 165, 250), "cool")
+        .WithYAxisLabels(false)
+        .WithBaseline()
+        .WithName("down")
+        .WithVerticalAlignment(VerticalAlignment.Fill)
+        .WithMargin(1, 0, 1, 0)
+        .Build();
+
+    private static LineGraphControl UpGraph() => Controls.LineGraph()
+        .WithTitle("↑ Upload", new Color(251, 146, 60))
+        .WithMode(LineGraphMode.Braille)
+        .WithMaxValue(GraphMaxBytesPerSec)
+        .AddSeries("up", new Color(251, 146, 60), "warm")
+        .WithYAxisLabels(false)
+        .WithBaseline()
+        .WithName("up")
+        .WithVerticalAlignment(VerticalAlignment.Fill)
+        .WithMargin(1, 0, 1, 0)
+        .Build();
+
+    private static SparklineControl Spark() => Controls.Sparkline()
+        .WithMode(SparklineMode.Block)
+        .WithHeight(3)
+        .WithMaxValue(GraphMaxBytesPerSec)
+        .WithName("spark")
+        .WithMargin(1, 0, 1, 0)
+        .Build();
+
+    private MarkupControl Stats(IEnumerable<string> lines)
+    {
+        var stats = Controls.Markup(string.Empty)
+            .WithName("stats")
+            .WithMargin(1, 0, 1, 0)
+            .Build();
+        stats.SetContent(lines.ToList());
+        return stats;
+    }
+
+    /// <summary>
+    /// Builds the interior root control (a <see cref="GridControl"/>) laid out for the given mode.
+    /// Called at construction and on every mode switch; the window shell is reused across switches.
+    /// </summary>
+    private IWindowControl BuildContentFor(DisplayMode mode)
+    {
+        switch (mode)
+        {
+            case DisplayMode.Tiny:
+                // Single status line: ↓ <down>  ↑ <up>. No graphs.
+                return Stats(TinyStatLines());
+
+            case DisplayMode.Mini:
+                // Graphs only — both waveforms, no header/stats/footer.
+                return Controls.Grid()
+                    .Columns(GridLength.Star(1))
+                    .Rows(GridLength.Star(1), GridLength.Star(1))
+                    .RowGap(1)
+                    .WithPadding(1, 0, 1, 0)
+                    .WithVerticalAlignment(VerticalAlignment.Fill)
+                    .WithAlignment(HorizontalAlignment.Stretch)
+                    .Place(DownGraph(), 0, 0)
+                    .Place(UpGraph(), 1, 0)
+                    .Build();
+
+            case DisplayMode.Compact:
+                // Title row + both waveforms + a condensed stat line. No sparkline/footer.
+                return Controls.Grid()
+                    .Columns(GridLength.Star(1))
+                    .Rows(GridLength.Star(3), GridLength.Star(3), GridLength.Auto())
+                    .RowGap(1)
+                    .WithPadding(1, 0, 1, 0)
+                    .WithVerticalAlignment(VerticalAlignment.Fill)
+                    .WithAlignment(HorizontalAlignment.Stretch)
+                    .Place(DownGraph(), 0, 0)
+                    .Place(UpGraph(), 1, 0)
+                    .Place(Stats(CompactStatLines()), 2, 0)
+                    .Build();
+
+            case DisplayMode.Hero:
+            default:
+                // Full layout: both waveforms + sparkline + full stat panel + keybinding footer.
+                return Controls.Grid()
+                    .Columns(GridLength.Star(1))
+                    .Rows(GridLength.Star(3), GridLength.Star(3), GridLength.Auto(), GridLength.Auto())
+                    .RowGap(1)
+                    .WithPadding(1, 0, 1, 0)
+                    .WithVerticalAlignment(VerticalAlignment.Fill)
+                    .WithAlignment(HorizontalAlignment.Stretch)
+                    .Place(DownGraph(), 0, 0)
+                    .Place(UpGraph(), 1, 0)
+                    .Place(Spark(), 2, 0)
+                    .Place(Stats(BuildStatLines()), 3, 0)
+                    .Build();
+        }
+    }
+
+    /// <summary>
+    /// Reflows the window content in place to <paramref name="mode"/> by clearing the window's
+    /// controls and re-adding a freshly-built root. The window shell (and its async feed thread)
+    /// is preserved; the feed re-finds controls by name after the swap. Re-entrant-safe.
+    /// </summary>
+    private void SwitchMode(DisplayMode mode)
+    {
+        if (_window is null || mode == _mode || _rebuilding)
+            return;
+
+        _rebuilding = true;
+        try
+        {
+            _mode = mode;
+            _window.ClearControls();
+            _window.AddControl(BuildContentFor(_mode));
+        }
+        finally
+        {
+            _rebuilding = false;
+        }
+    }
+
+    private static DisplayMode NextMode(DisplayMode mode) => mode switch
+    {
+        DisplayMode.Hero => DisplayMode.Compact,
+        DisplayMode.Compact => DisplayMode.Mini,
+        DisplayMode.Mini => DisplayMode.Tiny,
+        _ => DisplayMode.Hero,
+    };
+
+    private void OnWindowResized(object? sender, SharpConsoleUI.Helpers.Size size)
+    {
+        if (_window is null)
+            return;
+
+        var d = _ws.DesktopDimensions;
+        var newMode = DisplayModeResolver.Resolve(d.Width, d.Height);
+        if (newMode != _mode)
+            SwitchMode(newMode);
     }
 
     /// <summary>
@@ -155,7 +260,7 @@ internal sealed class MonitorWindow
             window.FindControl<LineGraphControl>("down")?.AddDataPoint("down", s.DownBytesPerSec);
             window.FindControl<LineGraphControl>("up")?.AddDataPoint("up", s.UpBytesPerSec);
             window.FindControl<SparklineControl>("spark")?.AddDataPoint(s.DownBytesPerSec);
-            window.FindControl<MarkupControl>("stats")?.SetContent(BuildStatLines());
+            window.FindControl<MarkupControl>("stats")?.SetContent(CurrentStatLines());
 
             // ActiveBorderForegroundColor is a self-invalidating Window property setter;
             // per the MetricsWindow feed pattern it is safe to set from this thread.
@@ -193,6 +298,47 @@ internal sealed class MonitorWindow
             $"[dim]units[/] {(u == Units.Bits ? "bits" : "bytes")}   " +
             $"[dim]interval[/] {_intervalMs} ms",
             "[dim]q quit · r reset peaks · i iface · b bits/bytes · +/- interval[/]",
+        };
+    }
+
+    /// <summary>Condensed stat block for Compact mode: current ↓/↑ + peaks + totals (no footer).</summary>
+    private List<string> CompactStatLines()
+    {
+        var cur = _state.Current;
+        Units u = _state.Units;
+
+        string down = Format.Scale(cur.DownBytesPerSec, u);
+        string up = Format.Scale(cur.UpBytesPerSec, u);
+        string peakDown = Format.Scale(_state.PeakDown, u);
+        string peakUp = Format.Scale(_state.PeakUp, u);
+        string totalDown = FormatTotalBytes(_state.TotalDownBytes);
+        string totalUp = FormatTotalBytes(_state.TotalUpBytes);
+
+        string downHex = ToHex(Format.SpeedColor(cur.DownBytesPerSec));
+        string upHex = ToHex(Format.SpeedColor(cur.UpBytesPerSec));
+
+        return new List<string>
+        {
+            $"[bold]↓[/] [{downHex}]{down,-12}[/] [bold]↑[/] [{upHex}]{up,-12}[/] " +
+            $"[dim]peak[/] ↓ {peakDown,-10} ↑ {peakUp,-10} " +
+            $"[dim]total[/] ↓ {totalDown,-9} ↑ {totalUp,-9}",
+        };
+    }
+
+    /// <summary>Single-line stat for Tiny mode: ↓ &lt;down&gt;  ↑ &lt;up&gt;.</summary>
+    private List<string> TinyStatLines()
+    {
+        var cur = _state.Current;
+        Units u = _state.Units;
+
+        string down = Format.Scale(cur.DownBytesPerSec, u);
+        string up = Format.Scale(cur.UpBytesPerSec, u);
+        string downHex = ToHex(Format.SpeedColor(cur.DownBytesPerSec));
+        string upHex = ToHex(Format.SpeedColor(cur.UpBytesPerSec));
+
+        return new List<string>
+        {
+            $"[bold]↓[/] [{downHex}]{down}[/]  [bold]↑[/] [{upHex}]{up}[/]",
         };
     }
 
@@ -268,8 +414,14 @@ internal sealed class MonitorWindow
                 e.Handled = true;
                 break;
 
-            // m / t / n are display-mode toggles wired in later tasks — no-op hooks for now.
+            // m cycles the display mode manually (Hero → Compact → Mini → Tiny → Hero),
+            // overriding the auto mode until the next resize re-resolves from the desktop size.
             case 'm':
+                SwitchMode(NextMode(_mode));
+                e.Handled = true;
+                break;
+
+            // t / n are display-mode toggles reserved for later tasks — no-op hooks for now.
             case 't':
             case 'n':
                 e.Handled = true;
@@ -299,8 +451,16 @@ internal sealed class MonitorWindow
         RefreshStats();
     }
 
+    /// <summary>The stat lines appropriate for the current display mode.</summary>
+    private List<string> CurrentStatLines() => _mode switch
+    {
+        DisplayMode.Tiny => TinyStatLines(),
+        DisplayMode.Compact => CompactStatLines(),
+        _ => BuildStatLines(), // Hero (Mini has no stats control, so this is harmless there)
+    };
+
     private void RefreshStats()
     {
-        _window?.FindControl<MarkupControl>("stats")?.SetContent(BuildStatLines());
+        _window?.FindControl<MarkupControl>("stats")?.SetContent(CurrentStatLines());
     }
 }
