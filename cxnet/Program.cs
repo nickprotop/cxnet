@@ -60,9 +60,23 @@ internal static class Program
             return 0;
         }
 
-        // No exit-flag: the TUI is wired in Task 3.
-        System.Console.WriteLine("cxnet TUI starts in Task 3");
-        return 0;
+        // No exit-flag: launch the interactive TUI.
+        return RunTui(opts);
+    }
+
+    private static int RunTui(CliOptions opts)
+    {
+        var sampler = new NetworkSampler(opts.Interface);
+        var state = new Cxnet.State.MonitorState();
+
+        var ws = new SharpConsoleUI.ConsoleWindowSystem(
+            new SharpConsoleUI.Drivers.NetConsoleDriver(SharpConsoleUI.Drivers.RenderMode.Buffer));
+
+        int intervalMs = opts.RefreshMs > 0 ? opts.RefreshMs : DefaultRefreshMs;
+        var monitor = new Cxnet.Ui.MonitorWindow(ws, sampler, state, intervalMs, opts.Bits);
+        monitor.Show();
+
+        return ws.Run();
     }
 
     private static NetSample DoubleSample(NetworkSampler sampler, int gapMs)
