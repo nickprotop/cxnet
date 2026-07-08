@@ -55,18 +55,24 @@ internal static class BackgroundPortal
 
         var list = listBuilder.Build();
 
-        // Row index → factory, so a selection applies the right preset. Names are unique.
-        void Apply(string? name)
+        // Pre-select the current background (the last preset applied via the catalogue).
+        string? current = Backgrounds.CurrentName;
+        if (current != null)
         {
-            if (name == null) return;
-            foreach (var (n, make) in presets)
+            for (int i = 0; i < presets.Length; i++)
             {
-                if (n == name)
+                if (presets[i].Name == current)
                 {
-                    ws.DesktopBackground = make();
-                    return;
+                    list.SelectedIndex = i;
+                    break;
                 }
             }
+        }
+
+        void Apply(string? name)
+        {
+            if (name != null)
+                Backgrounds.Apply(ws, name);
         }
 
         int width = MinWidth;

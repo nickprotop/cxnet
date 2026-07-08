@@ -14,6 +14,26 @@ namespace Cxnet.Ui;
 /// </summary>
 internal static class Backgrounds
 {
+    /// <summary>
+    /// Name of the most recently applied preset (via <see cref="Apply"/>), so the picker can pre-select
+    /// the current background. Null until one is applied through this catalogue.
+    /// </summary>
+    public static string? CurrentName { get; private set; }
+
+    /// <summary>Applies the named preset to the window system and records it as current. No-op if unknown.</summary>
+    public static void Apply(ConsoleWindowSystem ws, string name)
+    {
+        foreach (var (n, make) in Presets)
+        {
+            if (n == name)
+            {
+                ws.DesktopBackground = make();
+                CurrentName = name;
+                return;
+            }
+        }
+    }
+
     /// <summary>Ordered (name, factory) presets for the picker.</summary>
     public static readonly (string Name, Func<DesktopBackgroundConfig> Make)[] Presets =
     {

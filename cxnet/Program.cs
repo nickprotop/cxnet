@@ -72,16 +72,10 @@ internal static class Program
         var ws = new SharpConsoleUI.ConsoleWindowSystem(
             new SharpConsoleUI.Drivers.NetConsoleDriver(SharpConsoleUI.Drivers.RenderMode.Buffer));
 
-        // Deep-ocean desktop background (vertical gradient + dot pattern) so the semi-transparent
-        // monitor window has something to composite against.
-        ws.DesktopBackground = new SharpConsoleUI.Rendering.DesktopBackgroundConfig
-        {
-            Gradient = new SharpConsoleUI.Rendering.GradientBackground(
-                SharpConsoleUI.Helpers.ColorGradient.FromColors(
-                    new SharpConsoleUI.Color(20, 60, 110), new SharpConsoleUI.Color(4, 10, 22)),
-                SharpConsoleUI.Rendering.GradientDirection.Vertical),
-            Pattern = SharpConsoleUI.Rendering.DesktopPatterns.Dots
-        };
+        // Deep-ocean desktop background (gradient + dot pattern) so the semi-transparent monitor window
+        // has something to composite against. Applied via the Backgrounds catalogue so the picker can
+        // pre-select the current background.
+        Cxnet.Ui.Backgrounds.Apply(ws, "Ocean Dots");
 
         // Register cxnet's palette themes so the 't' theme picker overlay can list/switch them.
         Cxnet.Ui.Themes.RegisterThemes(ws);
