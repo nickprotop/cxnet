@@ -116,6 +116,7 @@ internal static class Program
             Hint("q", "quit", () => monitor.Quit()),
             Hint("m", "mode", () => monitor.CycleMode()),
             Hint("t", "themes", () => monitor.OpenThemePicker()),
+            Hint("g", "bg", () => monitor.OpenBackgroundPicker()),
             Hint("n", "conns", () => monitor.OpenConnections()),
             Hint("r", "reset", () => monitor.ResetPeaks()),
             Hint("i", "iface", () => monitor.OpenInterfacePicker()),

@@ -99,6 +99,7 @@ internal sealed class MonitorWindow
         Global(ConsoleKey.N, OpenConnections);
         Global(ConsoleKey.R, ResetPeaks);
         Global(ConsoleKey.I, OpenInterfacePicker);
+        Global(ConsoleKey.G, OpenBackgroundPicker);
         Global(ConsoleKey.B, ToggleUnits);
         // Interval +/- : register the ConsoleKey variants terminals report for these glyphs.
         Global(ConsoleKey.OemPlus, IncreaseInterval);
@@ -512,6 +513,9 @@ internal sealed class MonitorWindow
 
     /// <summary>Opens the theme picker portal (t).</summary>
     public void OpenThemePicker() => ThemePortal.Open(_ws);
+
+    /// <summary>Opens the desktop-background picker portal (g).</summary>
+    public void OpenBackgroundPicker() => BackgroundPortal.Open(_ws);
 
     /// <summary>Opens the connections portal (n).</summary>
     public void OpenConnections() => ConnectionsPortal.Open(_ws);
