@@ -109,7 +109,8 @@ internal static class InterfacePortal
         // 4 columns with 3 padded ' │ ' separators (3 cols each).
         int contentCols = NameWidth + TypeWidth + IPv4Width + SpeedWidth + 3 * 3;
         int width = contentCols + 4; // border + slack
-        int height = Math.Clamp(details.Count + ChromeRows, 5, MaxRows + ChromeRows);
+        // Portal height = data rows + chrome (border top+bottom + the table header row), capped.
+        int height = Math.Clamp(details.Count + ChromeRows, ChromeRows + 1, MaxRows + ChromeRows);
 
         var rect = PortalHost.Anchor(ws, width, height);
         var content = new PortalContent(table, rect, PortalHost.Border(ws), PortalHost.Surface(ws));

@@ -101,8 +101,10 @@ internal static class ConnectionsPortal
             : RemoteWidth + StateWidth + CountWidth;
         int contentCols = colWidthSum + (columns - 1) * 3; // padded separators
         int width = contentCols + 4; // border + slack
-        int rowCount = (connections.Count == 0 ? 1 : connections.Count) + 1; // + header
-        int height = Math.Clamp(rowCount + 3, 6, MaxRows + 4); // border(2) + header(1)
+        // Portal height = data rows + chrome (border top+bottom + the table header row), capped.
+        const int Chrome = 3; // border(2) + header(1)
+        int dataRows = connections.Count == 0 ? 1 : connections.Count;
+        int height = Math.Clamp(dataRows + Chrome, Chrome + 1, MaxRows + Chrome);
 
         var rect = PortalHost.Anchor(ws, width, height);
         var content = new PortalContent(table, rect, PortalHost.Border(ws), PortalHost.Surface(ws));
