@@ -37,12 +37,27 @@ Write-Host "Latest version: $version"
 # Create directories
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
-# Download binary
-Write-Host "Downloading $binary..."
-$outputPath = Join-Path $installDir "cxnet.exe"
-Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $outputPath
+# Suppress Invoke-WebRequest's built-in progress UI: for a large file it re-renders per chunk and makes
+# the download many times slower. We print our own status instead.
+$ProgressPreference = 'SilentlyContinue'
 
-# Download uninstaller
+# Download binary to a temp file, then move it into place. The binary is ~75 MB (self-contained), so a
+# silent download can look hung — the messages below make the wait expected. Downloading to a temp file
+# and moving it in also avoids failing when an existing cxnet.exe is in use (a running exe can't be
+# overwritten in place).
+Write-Host "Downloading $binary (~75 MB, this may take a moment)..."
+$outputPath = Join-Path $installDir "cxnet.exe"
+$tmpPath = Join-Path $installDir ".cxnet.download.tmp"
+try {
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpPath
+    Move-Item -Force -Path $tmpPath -Destination $outputPath
+    Write-Host "Download complete." -ForegroundColor Green
+}
+finally {
+    if (Test-Path $tmpPath) { Remove-Item -Force $tmpPath }
+}
+
+# Download uninstaller (small — no temp-file dance needed)
 $uninstallUrl = "https://raw.githubusercontent.com/$repo/main/uninstall.ps1"
 $uninstallPath = Join-Path $installDir "cxnet-uninstall.ps1"
 Invoke-WebRequest -Uri $uninstallUrl -OutFile $uninstallPath
