@@ -103,10 +103,13 @@ internal static class Program
         // and fires the SAME MonitorWindow action the matching key routes through.
         const string Accent = "#7DD3FC"; // sky-300: bright, readable on the dark bottom panel
 
-        static SharpConsoleUI.Panel.IPanelElement Hint(string key, string label, Action action) =>
+        // Hint clicks are dispatched on the driver's input thread, so marshal each action onto the UI
+        // thread — the actions mutate window/controls (mode rebuild, portal, stats) which must not race
+        // the render loop. (The matching key paths are already queued onto the UI thread by the driver.)
+        SharpConsoleUI.Panel.IPanelElement Hint(string key, string label, Action action) =>
             SharpConsoleUI.Panel.Elements
                 .StatusText($"[{Accent}]{key}[/][grey58] {label}[/]  ")
-                .OnClick(action)
+                .OnClick(() => ws.EnqueueOnUIThread(action))
                 .Build();
 
         ws.BottomPanel?.AddLeft(

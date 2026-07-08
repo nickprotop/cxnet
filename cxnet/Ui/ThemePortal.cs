@@ -26,14 +26,11 @@ public static class ThemePortal
     /// <summary>Columns for the two swatches (`██ ██ `) plus border/padding breathing room.</summary>
     private const int RowChromeCols = 10;
 
-    /// <summary>Extra rows for the list's chrome (border top/bottom).</summary>
+    /// <summary>Border rows added to the theme count (top + bottom).</summary>
     private const int ChromeRows = 2;
 
     /// <summary>Left inset — sits under the `t` hint region at screen-left.</summary>
     private const int AnchorX = 2;
-
-    /// <summary>Rows reserved at screen-bottom for the hint bar.</summary>
-    private const int BottomBarRows = 1;
 
     /// <summary>
     /// Opens the theme portal overlay. If one is already open it is closed instead (toggle),
@@ -53,11 +50,12 @@ public static class ThemePortal
 
         // Capture the theme active on open so Esc / click-away can revert after live previewing.
         string? original = ws.ThemeStateService.CurrentTheme?.Name;
-        var current = original;
+
 
         var listBuilder = Controls.List("Themes")
             .WithName("themelist")
-            .Selectable();
+            .Selectable()
+            .WithVerticalAlignment(SharpConsoleUI.Layout.VerticalAlignment.Fill);
 
         var fallbackSwatch = new Color(150, 150, 150);
         foreach (var name in names)
@@ -71,11 +69,33 @@ public static class ThemePortal
 
         var list = listBuilder.Build();
 
+        // Size to content: height = theme rows + border; width fits `██ ██ ` + the longest name.
+        int longestName = 0;
+        foreach (var name in names)
+            longestName = Math.Max(longestName, name.Length);
+        int width = Math.Max(MinWidth, longestName + RowChromeCols);
+        int height = names.Count + ChromeRows;
+
+        // Upward anchor: near the left, bottom edge flush with the desktop's last usable row so the
+        // box sits directly ABOVE the hint bar (opening upward). Bounds is absolute screen-space, and
+        // DesktopBottomRight.Y is the last desktop row above the bottom bar (top bar accounted for).
+        int x = AnchorX;
+        int y = Math.Max(0, ws.DesktopBottomRight.Y - height + 1);
+        var rect = new Rectangle(x, y, width, height);
+
+        // Wrap the list in a PortalContentBase that draws a rounded border and HOSTS the list — the
+        // framework's supported way to give a desktop portal bordered, laid-out content (a plain
+        // container inside a portal collapses its child; PortalContentBase measures the child tight).
+        var surface = Palette.Current(ws).Surface;
+        var content = new ThemePortalContent(list, rect,
+            border: Palette.Current(ws).Accent,
+            background: new Color(surface.R, surface.G, surface.B, 205));
+
         // Highlight the currently-active theme FIRST, then subscribe — so setting the initial
         // selection below does not fire a spurious live preview.
         for (int i = 0; i < names.Count; i++)
         {
-            if (names[i] == current)
+            if (names[i] == original)
             {
                 list.SelectedIndex = i;
                 break;
@@ -103,19 +123,6 @@ public static class ThemePortal
             _open = null;
         };
 
-        // Size to content: height ≈ theme count + chrome; width fits `██ ██ ` + the longest name.
-        int longestName = 0;
-        foreach (var name in names)
-            longestName = Math.Max(longestName, name.Length);
-        int width = Math.Max(MinWidth, longestName + RowChromeCols);
-        int height = names.Count + ChromeRows;
-
-        // Upward anchor: near the left, sitting ABOVE the bottom hint bar (opens upward).
-        var screen = ws.DesktopDimensions;
-        int x = AnchorX;
-        int y = Math.Max(0, screen.Height - BottomBarRows - height);
-        var rect = new Rectangle(x, y, width, height);
-
         // Enter/click commits: the previewed theme is already applied, so just close.
         list.ItemActivated += (_, _) =>
         {
@@ -126,7 +133,7 @@ public static class ThemePortal
         };
 
         _open = ws.DesktopPortalService.CreatePortal(new DesktopPortalOptions(
-            Content: list,
+            Content: content,
             Bounds: rect,
             DismissOnClickOutside: true,
             OnDismiss: onDismiss));
