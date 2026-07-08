@@ -26,7 +26,15 @@ leaving the terminal.
 
 **Watch. Measure. Flow.**
 
-<!-- ![cxnet Screenshot](.github/screenshot.png) -->
+<div align="center">
+
+![cxnet demo](.github/cxnet-demo.gif)
+
+<sub>Live throughput waveform, connections & interface pickers, and a Matrix-rain desktop — all in the terminal.</sub>
+
+**Built on [SharpConsoleUI](https://github.com/nickprotop/ConsoleEx)** — the .NET terminal application framework. The overlapping windows, the alpha-blended desktop background, the bordered pop-over pickers, and the per-interface tables you see above are all SharpConsoleUI.
+
+</div>
 
 ## Quick Start
 
