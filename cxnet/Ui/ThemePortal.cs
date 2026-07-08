@@ -26,8 +26,8 @@ internal static class ThemePortal
     /// <summary>Columns for the two swatches (`██ ██ `) plus border/padding breathing room.</summary>
     private const int RowChromeCols = 10;
 
-    /// <summary>Border rows added to the theme count (top + bottom).</summary>
-    private const int ChromeRows = 2;
+    /// <summary>Chrome rows added to the theme count: border top + bottom + the list's title row.</summary>
+    private const int ChromeRows = 3;
 
     /// <summary>
     /// Opens the theme portal overlay. If one is already open it is closed instead (toggle),

@@ -31,10 +31,60 @@ public sealed class NetworkSampler
         Baseline();
     }
 
-    /// <summary>Non-loopback interfaces that are up and have an assigned address.</summary>
+    /// <summary>
+    /// Name prefixes of virtual / container / bridge interfaces that clutter the picker and are almost
+    /// never what the user wants to monitor. Filtered out of <see cref="AvailableInterfaces"/> (which
+    /// also feeds auto-selection, so a veth is never auto-picked). The currently-monitored interface is
+    /// re-added by callers even if it matches, so an explicitly chosen virtual interface still shows.
+    /// Best-effort and cross-platform: it's a name-prefix DROP, so prefixes that don't apply on a given
+    /// OS simply never match (harmless). Covers Linux (veth/docker/br-/virbr/vnet/cni/cali/flannel),
+    /// macOS (utun/awdl/llw/bridge/gif/stf), and common Windows virtual-adapter names (vEthernet/VMware/
+    /// VirtualBox — matched case-insensitively against the interface Name).
+    /// </summary>
+    private static readonly string[] VirtualPrefixes =
+    {
+        // Linux
+        "veth", "docker", "br-", "virbr", "vnet", "tun", "tap", "bond", "dummy", "cni", "cali", "flannel", "kube", "kvmbr", "vmbr", "lxc", "lxd", "wg", "zt",
+        // macOS
+        "utun", "awdl", "llw", "bridge", "gif", "stf", "ap",
+        // Windows (friendly-name prefixes)
+        "vEthernet", "VMware", "VirtualBox", "Hyper-V",
+    };
+
+    private static bool IsVirtual(string name)
+    {
+        foreach (var prefix in VirtualPrefixes)
+        {
+            if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Non-loopback, non-virtual interfaces that are up and have an assigned address. Virtual /
+    /// container / bridge interfaces (veth*, docker0, br-*, virbr0, …) are filtered out — see
+    /// <see cref="VirtualPrefixes"/>.
+    /// </summary>
     public static IReadOnlyList<string> AvailableInterfaces()
     {
         var result = new List<string>();
+        foreach (var info in AvailableInterfaceDetails())
+            result.Add(info.Name);
+        return result;
+    }
+
+    /// <summary>Human-facing details for an available interface, for the picker table. All fields are
+    /// derived cross-platform from <see cref="NetworkInterface"/>.</summary>
+    public readonly record struct InterfaceInfo(string Name, string Type, string IPv4, string Speed);
+
+    /// <summary>
+    /// Available (non-loopback, up, addressed, non-virtual) interfaces with cross-platform display
+    /// details: friendly type (Ethernet/Wi-Fi/…), first IPv4 address, and link speed.
+    /// </summary>
+    public static IReadOnlyList<InterfaceInfo> AvailableInterfaceDetails()
+    {
+        var result = new List<InterfaceInfo>();
         foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
         {
             if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback)
@@ -43,9 +93,48 @@ public sealed class NetworkSampler
                 continue;
             if (!HasUnicastAddress(ni))
                 continue;
-            result.Add(ni.Name);
+            if (IsVirtual(ni.Name))
+                continue;
+            result.Add(new InterfaceInfo(ni.Name, FriendlyType(ni), FirstIPv4(ni), FriendlySpeed(ni)));
         }
         return result;
+    }
+
+    private static string FriendlyType(NetworkInterface ni) => ni.NetworkInterfaceType switch
+    {
+        NetworkInterfaceType.Ethernet or NetworkInterfaceType.GigabitEthernet or NetworkInterfaceType.FastEthernetT
+            or NetworkInterfaceType.FastEthernetFx => "Ethernet",
+        NetworkInterfaceType.Wireless80211 => "Wi-Fi",
+        NetworkInterfaceType.Ppp => "PPP",
+        NetworkInterfaceType.Tunnel => "Tunnel",
+        _ => ni.NetworkInterfaceType.ToString(),
+    };
+
+    private static string FirstIPv4(NetworkInterface ni)
+    {
+        try
+        {
+            foreach (var a in ni.GetIPProperties().UnicastAddresses)
+            {
+                if (a.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                    return a.Address.ToString();
+            }
+        }
+        catch { /* best-effort */ }
+        return "";
+    }
+
+    private static string FriendlySpeed(NetworkInterface ni)
+    {
+        long bps;
+        try { bps = ni.Speed; } catch { return "-"; }
+        if (bps <= 0)
+            return "-";
+        if (bps >= 1_000_000_000)
+            return $"{bps / 1_000_000_000.0:0.#} Gb";
+        if (bps >= 1_000_000)
+            return $"{bps / 1_000_000} Mb";
+        return $"{bps / 1_000} Kb";
     }
 
     /// <summary>Switches the sampled interface and re-establishes a baseline read.</summary>

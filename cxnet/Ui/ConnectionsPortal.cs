@@ -60,6 +60,7 @@ internal static class ConnectionsPortal
 
         var tableBuilder = Controls.Table()
             .WithName("conntable")
+            .NoBorder() // PortalContent draws the rounded border — no inner table border
             .WithVerticalAlignment(SharpConsoleUI.Layout.VerticalAlignment.Fill)
             .AddColumn("Remote", TextJustification.Left, RemoteWidth)
             .AddColumn("State", TextJustification.Left, StateWidth)
