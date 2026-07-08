@@ -118,7 +118,7 @@ internal static class Program
             Hint("t", "themes", () => monitor.OpenThemePicker()),
             Hint("n", "conns", () => monitor.OpenConnections()),
             Hint("r", "reset", () => monitor.ResetPeaks()),
-            Hint("i", "iface", () => monitor.CycleInterface()),
+            Hint("i", "iface", () => monitor.OpenInterfacePicker()),
             Hint("b", "bits", () => monitor.ToggleUnits()),
             Hint("+/-", "interval", () => monitor.IncreaseInterval()));
 

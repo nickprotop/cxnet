@@ -29,14 +29,11 @@ public static class ThemePortal
     /// <summary>Border rows added to the theme count (top + bottom).</summary>
     private const int ChromeRows = 2;
 
-    /// <summary>Left inset — sits under the `t` hint region at screen-left.</summary>
-    private const int AnchorX = 2;
-
     /// <summary>
     /// Opens the theme portal overlay. If one is already open it is closed instead (toggle),
     /// so pressing the key again dismisses it.
     /// </summary>
-    public static void Open(ConsoleWindowSystem ws)
+    public static void Open(ConsoleWindowSystem ws, Func<ConsoleKeyInfo, bool>? shortcutHandler = null)
     {
         // Toggle: a second press closes the open portal.
         if (_open != null)
@@ -45,6 +42,10 @@ public static class ThemePortal
             _open = null;
             return;
         }
+
+        // Only one desktop portal open at a time: close any other before opening this one
+        // (harmless no-op when none is open).
+        PortalHost.CloseAll(ws);
 
         var names = ws.ThemeRegistryService.GetAvailableThemeNames();
 
@@ -78,17 +79,12 @@ public static class ThemePortal
 
         // Upward anchor: near the left, bottom border flush on the last desktop row above the hint bar
         // (opens upward). Bounds is absolute screen-space; DesktopBottomRight.Y is that last row.
-        int x = AnchorX;
-        int y = Math.Max(0, ws.DesktopBottomRight.Y - height + 1);
-        var rect = new Rectangle(x, y, width, height);
+        var rect = PortalHost.Anchor(ws, width, height);
 
         // Wrap the list in a PortalContentBase that draws a rounded border and HOSTS the list — the
         // framework's supported way to give a desktop portal bordered, laid-out content (a plain
         // container inside a portal collapses its child; PortalContentBase measures the child tight).
-        var surface = Palette.Current(ws).Surface;
-        var content = new ThemePortalContent(list, rect,
-            border: Palette.Current(ws).Accent,
-            background: new Color(surface.R, surface.G, surface.B, 205));
+        var content = new PortalContent(list, rect, PortalHost.Border(ws), PortalHost.Surface(ws), shortcutHandler);
 
         // Highlight the currently-active theme FIRST, then subscribe — so setting the initial
         // selection below does not fire a spurious live preview.

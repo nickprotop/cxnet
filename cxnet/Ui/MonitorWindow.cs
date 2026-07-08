@@ -446,64 +446,39 @@ internal sealed class MonitorWindow
 
     private void OnKeyPressed(object? sender, KeyPressedEventArgs e)
     {
-        var key = e.KeyInfo;
+        if (HandleShortcut(e.KeyInfo))
+            e.Handled = true;
+    }
 
+    /// <summary>
+    /// Routes a cxnet shortcut key to its action. Used both by the window's own key handler AND — via
+    /// the portal content's shortcut hook — while a desktop portal is open, so a shortcut still works
+    /// then: the same key toggles its portal closed, a different one switches to the other portal.
+    /// Returns true if the key was a recognised shortcut.
+    /// </summary>
+    public bool HandleShortcut(ConsoleKeyInfo key)
+    {
         // q or Ctrl+C → quit.
         if (key.Key == ConsoleKey.Q ||
             (key.Key == ConsoleKey.C && (key.Modifiers & ConsoleModifiers.Control) != 0))
         {
             Quit();
-            e.Handled = true;
-            return;
+            return true;
         }
 
         switch (char.ToLowerInvariant(key.KeyChar))
         {
-            case 'r':
-                ResetPeaks();
-                e.Handled = true;
-                break;
-
-            case 'i':
-                CycleInterface();
-                e.Handled = true;
-                break;
-
-            case 'b':
-                ToggleUnits();
-                e.Handled = true;
-                break;
-
+            case 'r': ResetPeaks(); return true;
+            case 'i': OpenInterfacePicker(); return true;
+            case 'b': ToggleUnits(); return true;
             case '+':
-            case '=': // unshifted '+' key
-                IncreaseInterval();
-                e.Handled = true;
-                break;
-
+            case '=': IncreaseInterval(); return true; // unshifted '+'
             case '-':
-            case '_':
-                DecreaseInterval();
-                e.Handled = true;
-                break;
-
-            // m cycles the display mode manually (Hero → Compact → Mini → Tiny → Hero) and resizes
-            // the window to match — a deliberate size choice (applyPlacement: true).
-            case 'm':
-                CycleMode();
-                e.Handled = true;
-                break;
-
-            // t → translucent theme picker; n → translucent connections overlay.
-            // Both toggle (a second press closes) and composite over the live waveforms.
-            case 't':
-                OpenThemePicker();
-                e.Handled = true;
-                break;
-
-            case 'n':
-                OpenConnections();
-                e.Handled = true;
-                break;
+            case '_': DecreaseInterval(); return true;
+            case 'm': CycleMode(); return true;
+            case 't': OpenThemePicker(); return true;
+            case 'n': OpenConnections(); return true;
+            default: return false;
         }
     }
 
@@ -545,34 +520,16 @@ internal sealed class MonitorWindow
     /// <summary>Cycles the display mode (Hero → Compact → Mini → Tiny → Hero) and resizes to match (m).</summary>
     public void CycleMode() => SwitchMode(NextMode(_mode), applyPlacement: true);
 
-    /// <summary>Opens the translucent theme picker overlay (t).</summary>
-    public void OpenThemePicker() => ThemePortal.Open(_ws);
+    /// <summary>Opens the theme picker portal (t). Passes HandleShortcut so global shortcuts still
+    /// work while it is open (same key closes it, another key switches portals).</summary>
+    public void OpenThemePicker() => ThemePortal.Open(_ws, HandleShortcut);
 
-    /// <summary>Opens the translucent connections overlay (n).</summary>
-    public void OpenConnections() => ProcessPanel.Show(_ws);
+    /// <summary>Opens the connections portal (n).</summary>
+    public void OpenConnections() => ConnectionsPortal.Open(_ws, HandleShortcut);
 
-    /// <summary>Advances to the next available network interface (i).</summary>
-    public void CycleInterface()
-    {
-        var available = NetworkSampler.AvailableInterfaces();
-        if (available.Count == 0)
-            return;
-
-        int idx = -1;
-        for (int i = 0; i < available.Count; i++)
-        {
-            if (available[i] == _sampler.InterfaceName)
-            {
-                idx = i;
-                break;
-            }
-        }
-
-        string next = available[(idx + 1) % available.Count];
-        _sampler.SelectInterface(next);
-        _state.InterfaceName = next;
-        RefreshStats();
-    }
+    /// <summary>Opens the interface-picker portal (i): choose the monitored interface.</summary>
+    public void OpenInterfacePicker() => InterfacePortal.Open(_ws, _sampler, HandleShortcut,
+        onSelected: () => { _state.ResetPeaks(); _state.InterfaceName = _sampler.InterfaceName; RefreshStats(); });
 
     /// <summary>The stat lines appropriate for the current display mode.</summary>
     private List<string> CurrentStatLines() => _mode switch
