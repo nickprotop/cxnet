@@ -76,14 +76,15 @@ public static class ThemePortal
         int width = Math.Max(MinWidth, longestName + RowChromeCols);
         int height = names.Count + ChromeRows;
 
-        // Upward anchor: near the left, bottom edge flush with the last row ABOVE the hint bar (opens
-        // upward). Bounds is absolute screen-space, so anchor off the absolute screen height minus the
-        // bottom-bar height — NOT DesktopBottomRight.Y, which also subtracts the top-status height and
-        // would leave the box a row short.
+        // Upward anchor: near the left, sitting ABOVE the hint bar (opens upward). Bounds is absolute
+        // screen-space. The desktop render region clips at the row just above the bottom bar, so the
+        // box's bottom border must land on the second-to-last desktop row — anchor one row higher than
+        // the bar so the full box (bottom border included) stays inside the clip. (DesktopBottomRight.Y
+        // is unusable here: it also subtracts the top-status height and would push the box up further.)
         int screenHeight = ws.ConsoleDriver.ScreenSize.Height;
         int bottomBarHeight = ws.BottomPanel?.Height ?? 0;
         int x = AnchorX;
-        int y = Math.Max(0, screenHeight - bottomBarHeight - height);
+        int y = Math.Max(0, screenHeight - bottomBarHeight - height - 1);
         var rect = new Rectangle(x, y, width, height);
 
         // Wrap the list in a PortalContentBase that draws a rounded border and HOSTS the list — the
