@@ -14,14 +14,14 @@ Write-Host "Installing cxnet..." -ForegroundColor Cyan
 # that API returns $null on some Windows PowerShell 5.1 / .NET Framework configurations, and the
 # ".ToString()" on it then throws "cannot call a method on a null-valued expression". PROCESSOR_ARCHITECTURE
 # is defined on every Windows install. When a 32-bit shell runs on 64-bit Windows (WOW64), it reads
-# "x86" while PROCESSOR_ARCHITEW6432 holds the true OS arch — prefer the latter when present.
+# "x86" while PROCESSOR_ARCHITEW6432 holds the true OS arch - prefer the latter when present.
 $arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 switch ($arch) {
     "AMD64" { $binary = "cxnet-win-x64.exe" }
     "ARM64" { $binary = "cxnet-win-arm64.exe" }
     default {
         Write-Host "Error: Unsupported architecture: $arch" -ForegroundColor Red
-        exit 1
+        throw "cxnet install aborted: unsupported architecture '$arch'."
     }
 }
 
@@ -33,7 +33,7 @@ $asset = $release.assets | Where-Object { $_.name -eq $binary }
 
 if (-not $asset) {
     Write-Host "Error: Binary '$binary' not found in release $($release.tag_name)" -ForegroundColor Red
-    exit 1
+    throw "cxnet install aborted: binary '$binary' not found in release $($release.tag_name)."
 }
 
 Write-Host "Latest version: $version"
@@ -46,7 +46,7 @@ New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 $ProgressPreference = 'SilentlyContinue'
 
 # Download binary to a temp file, then move it into place. The binary is ~75 MB (self-contained), so a
-# silent download can look hung — the messages below make the wait expected. Downloading to a temp file
+# silent download can look hung - the messages below make the wait expected. Downloading to a temp file
 # and moving it in also avoids failing when an existing cxnet.exe is in use (a running exe can't be
 # overwritten in place).
 Write-Host "Downloading $binary (~75 MB, this may take a moment)..."
@@ -61,7 +61,7 @@ finally {
     if (Test-Path $tmpPath) { Remove-Item -Force $tmpPath }
 }
 
-# Download uninstaller (small — no temp-file dance needed)
+# Download uninstaller (small - no temp-file dance needed)
 $uninstallUrl = "https://raw.githubusercontent.com/$repo/main/uninstall.ps1"
 $uninstallPath = Join-Path $installDir "cxnet-uninstall.ps1"
 Invoke-WebRequest -Uri $uninstallUrl -OutFile $uninstallPath
@@ -73,10 +73,12 @@ if ($userPath -notlike "*$installDir*") {
     Write-Host "Added $installDir to user PATH" -ForegroundColor Green
 }
 
+# ASCII-only divider: this file has no UTF-8 BOM, so Windows PowerShell 5.1 reads it as ANSI when the
+# script is run from disk and mangles multi-byte box-drawing characters into garbage. '=' is safe.
 Write-Host ""
-Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host "===================================================" -ForegroundColor Cyan
 Write-Host "  cxnet v$version installed!" -ForegroundColor Green
-Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host "===================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Binary:  $outputPath"
 Write-Host ""
