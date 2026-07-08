@@ -108,13 +108,18 @@ internal static class ThemePortal
 
         list.ItemActivated += (_, item) =>
         {
-            if (item?.Tag is string name)
-                ws.EnqueueOnUIThread(() => ws.ThemeStateService.SwitchTheme(name));
-
             var portal = _open;
             _open = null;
-            if (portal != null)
-                ws.DesktopPortalService.RemovePortal(portal);
+            // ItemActivated can fire from a (double-)click on the driver's mouse thread. RemovePortal
+            // does structural teardown (RestorePortalRegions, SetActiveWindow) that must run on the UI
+            // thread, not race the render loop — marshal the whole thing.
+            ws.EnqueueOnUIThread(() =>
+            {
+                if (item?.Tag is string name)
+                    ws.ThemeStateService.SwitchTheme(name);
+                if (portal != null)
+                    ws.DesktopPortalService.RemovePortal(portal);
+            });
         };
 
         _open = ws.DesktopPortalService.CreatePortal(new DesktopPortalOptions(
