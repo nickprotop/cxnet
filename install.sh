@@ -53,11 +53,20 @@ echo "Latest version: $VERSION"
 
 # Download binary
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$BINARY"
-echo "Downloading $BINARY..."
+echo "Downloading $BINARY (~75 MB)..."
 
 mkdir -p "$INSTALL_DIR"
-curl -fsSL "$DOWNLOAD_URL" -o "$INSTALL_DIR/cxnet"
-chmod +x "$INSTALL_DIR/cxnet"
+
+# Download to a temp file and move into place atomically. This shows a progress bar (the binary is
+# large, so a silent download looks hung) and avoids "Text file busy" (ETXTBSY): writing the binary in
+# place leaves a window where it is half-written or where a running copy blocks the write. An atomic
+# rename swaps it instantly, with no such window.
+TMP_BINARY="$INSTALL_DIR/.cxnet.download.$$"
+trap 'rm -f "$TMP_BINARY"' EXIT
+curl -fSL --progress-bar "$DOWNLOAD_URL" -o "$TMP_BINARY"
+chmod +x "$TMP_BINARY"
+mv -f "$TMP_BINARY" "$INSTALL_DIR/cxnet"
+trap - EXIT
 
 # Download uninstaller
 curl -fsSL "https://raw.githubusercontent.com/$REPO/main/uninstall.sh" -o "$INSTALL_DIR/cxnet-uninstall.sh"
