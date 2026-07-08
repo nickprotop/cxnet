@@ -546,7 +546,7 @@ internal sealed class MonitorWindow
     public void CycleMode() => SwitchMode(NextMode(_mode), applyPlacement: true);
 
     /// <summary>Opens the translucent theme picker overlay (t).</summary>
-    public void OpenThemePicker() => ThemePicker.Show(_ws);
+    public void OpenThemePicker() => ThemePortal.Open(_ws);
 
     /// <summary>Opens the translucent connections overlay (n).</summary>
     public void OpenConnections() => ProcessPanel.Show(_ws);

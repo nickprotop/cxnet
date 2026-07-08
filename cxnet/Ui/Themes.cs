@@ -7,7 +7,7 @@ namespace Cxnet.Ui;
 /// cxnet's palette themes. Each theme is derived by the palette generator from two seed
 /// colors (a Primary accent + a Background surface); everything else — borders, selection,
 /// status colors, contrast text — is generated. The <c>t</c> key opens the translucent
-/// <see cref="ThemePicker"/> to switch between them live over the running waveforms.
+/// <see cref="ThemePortal"/> to switch between them live over the running waveforms.
 /// </summary>
 internal static class Themes
 {
