@@ -15,7 +15,7 @@ namespace Cxnet.Ui;
 /// previewed theme) and closes; Esc — or clicking away — reverts to the theme that was active
 /// when the overlay opened. Non-modal so the graphs keep animating.
 /// </summary>
-public static class ThemePortal
+internal static class ThemePortal
 {
     /// <summary>The single open portal, if any. Used to toggle (a second press closes it).</summary>
     private static DesktopPortal? _open;
@@ -109,22 +109,27 @@ public static class ThemePortal
         // sees the committed state and skips the revert.
         bool committed = false;
 
-        // Reverts to the theme active on open unless the user committed. Fires on Esc (the framework
-        // auto-removes the top portal) AND on click-outside — both routes run OnDismiss.
+        // Reverts to the theme active on open unless the user committed. Fires on Esc AND click-outside;
+        // click-outside dispatches on the driver input thread, so marshal the (structural) SwitchTheme
+        // onto the UI thread. Clearing _open is a plain field write — safe on any thread, kept synchronous
+        // so the toggle check never sees a stale reference.
         Action onDismiss = () =>
         {
-            if (!committed && original != null)
-                ws.ThemeStateService.SwitchTheme(original);
             _open = null;
+            if (!committed && original != null)
+                ws.EnqueueOnUIThread(() => ws.ThemeStateService.SwitchTheme(original));
         };
 
-        // Enter/click commits: the previewed theme is already applied, so just close.
+        // Enter/click commits: the previewed theme is already applied, so just close. ItemActivated can
+        // fire from a click (driver thread); RemovePortal → OnDismiss runs the revert-skip, so set
+        // committed first, then remove. RemovePortal is thread-safe (removes from the portal list).
         list.ItemActivated += (_, _) =>
         {
             committed = true;
-            if (_open != null)
-                ws.DesktopPortalService.RemovePortal(_open);
+            var portal = _open;
             _open = null;
+            if (portal != null)
+                ws.DesktopPortalService.RemovePortal(portal);
         };
 
         _open = ws.DesktopPortalService.CreatePortal(new DesktopPortalOptions(

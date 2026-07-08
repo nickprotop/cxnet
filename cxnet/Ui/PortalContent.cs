@@ -40,8 +40,9 @@ internal sealed class PortalContent : PortalContentBase, IInteractiveControl
 
     public override Rectangle GetPortalBounds() => _bounds;
 
-    // Mouse is dispatched to the hosted child by the base class; nothing extra to do here.
-    public override bool ProcessMouseEvent(MouseEventArgs args) => false;
+    // Forward mouse events to the hosted child (border-offset applied by the base) so clicking a
+    // list/table row inside the portal works — the base does NOT auto-forward.
+    public override bool ProcessMouseEvent(MouseEventArgs args) => ProcessHostedMouseEvent(args);
 
     // Content is hosted, so the base PaintDOM paints the child directly and never calls this.
     protected override void PaintPortalContent(CharacterBuffer buffer, LayoutRect bounds,

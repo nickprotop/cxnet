@@ -63,17 +63,18 @@ internal static class InterfacePortal
             }
         }
 
-        // Enter/click selects: switch the sampler's interface, run the caller's refresh, close.
+        // Enter/click selects: switch the sampler's interface, run the caller's refresh, then close.
+        // ItemActivated can fire from a mouse click (driver input thread), so marshal the structural
+        // switch/refresh onto the UI thread; closing the portal is thread-safe and done synchronously.
         list.ItemActivated += (_, item) =>
         {
             if (item?.Tag is string name)
-            {
-                sampler.SelectInterface(name);
-                onSelected();
-            }
-            if (_open != null)
-                ws.DesktopPortalService.RemovePortal(_open);
+                ws.EnqueueOnUIThread(() => { sampler.SelectInterface(name); onSelected(); });
+
+            var portal = _open;
             _open = null;
+            if (portal != null)
+                ws.DesktopPortalService.RemovePortal(portal);
         };
 
         int longestName = 0;
