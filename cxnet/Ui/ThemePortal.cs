@@ -96,8 +96,16 @@ internal static class ThemePortal
         // Wrap the list in a PortalContentBase that draws a rounded border and HOSTS the list.
         var content = new PortalContent(list, rect, PortalHost.Border(ws), PortalHost.Surface(ws));
 
-        // Enter/click applies the selected theme and closes; Esc / click-away just closes (no preview,
-        // no revert). ItemActivated can fire from a click (driver thread), so marshal the switch.
+        // Single click / arrow (SelectedItemChanged) APPLIES the theme but keeps the portal open, so you
+        // can try several. Double click / Enter (ItemActivated) applies AND closes. Esc / click-away just
+        // closes. Both events can fire from the driver (mouse) thread, so marshal SwitchTheme to the UI
+        // thread. Subscribe AFTER the initial SelectedIndex is set so opening doesn't apply spuriously.
+        list.SelectedItemChanged += (_, item) =>
+        {
+            if (item?.Tag is string name)
+                ws.EnqueueOnUIThread(() => ws.ThemeStateService.SwitchTheme(name));
+        };
+
         list.ItemActivated += (_, item) =>
         {
             if (item?.Tag is string name)
