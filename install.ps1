@@ -10,8 +10,9 @@ $installDir = "$env:LOCALAPPDATA\cxnet"
 
 Write-Host "Installing cxnet..." -ForegroundColor Cyan
 
-# Detect architecture
-$arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+# Detect architecture. OSArchitecture is an [Architecture] enum, not a string — convert to string
+# before matching, otherwise the switch can fall through to 'default' on a supported machine.
+$arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 switch ($arch) {
     "X64"   { $binary = "cxnet-win-x64.exe" }
     "Arm64" { $binary = "cxnet-win-arm64.exe" }
