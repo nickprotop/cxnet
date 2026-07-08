@@ -10,12 +10,15 @@ $installDir = "$env:LOCALAPPDATA\cxnet"
 
 Write-Host "Installing cxnet..." -ForegroundColor Cyan
 
-# Detect architecture. OSArchitecture is an [Architecture] enum, not a string — convert to string
-# before matching, otherwise the switch can fall through to 'default' on a supported machine.
-$arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+# Detect architecture from the environment rather than [RuntimeInformation]::OSArchitecture:
+# that API returns $null on some Windows PowerShell 5.1 / .NET Framework configurations, and the
+# ".ToString()" on it then throws "cannot call a method on a null-valued expression". PROCESSOR_ARCHITECTURE
+# is defined on every Windows install. When a 32-bit shell runs on 64-bit Windows (WOW64), it reads
+# "x86" while PROCESSOR_ARCHITEW6432 holds the true OS arch — prefer the latter when present.
+$arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 switch ($arch) {
-    "X64"   { $binary = "cxnet-win-x64.exe" }
-    "Arm64" { $binary = "cxnet-win-arm64.exe" }
+    "AMD64" { $binary = "cxnet-win-x64.exe" }
+    "ARM64" { $binary = "cxnet-win-arm64.exe" }
     default {
         Write-Host "Error: Unsupported architecture: $arch" -ForegroundColor Red
         exit 1
