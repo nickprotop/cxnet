@@ -31,41 +31,7 @@ public sealed class NetworkSampler
         Baseline();
     }
 
-    /// <summary>
-    /// Name prefixes of virtual / container / bridge interfaces that clutter the picker and are almost
-    /// never what the user wants to monitor. Filtered out of <see cref="AvailableInterfaces"/> (which
-    /// also feeds auto-selection, so a veth is never auto-picked). The currently-monitored interface is
-    /// re-added by callers even if it matches, so an explicitly chosen virtual interface still shows.
-    /// Best-effort and cross-platform: it's a name-prefix DROP, so prefixes that don't apply on a given
-    /// OS simply never match (harmless). Covers Linux (veth/docker/br-/virbr/vnet/cni/cali/flannel),
-    /// macOS (utun/awdl/llw/bridge/gif/stf), and common Windows virtual-adapter names (vEthernet/VMware/
-    /// VirtualBox — matched case-insensitively against the interface Name).
-    /// </summary>
-    private static readonly string[] VirtualPrefixes =
-    {
-        // Linux
-        "veth", "docker", "br-", "virbr", "vnet", "tun", "tap", "bond", "dummy", "cni", "cali", "flannel", "kube", "kvmbr", "vmbr", "lxc", "lxd", "wg", "zt",
-        // macOS
-        "utun", "awdl", "llw", "bridge", "gif", "stf", "ap",
-        // Windows (friendly-name prefixes)
-        "vEthernet", "VMware", "VirtualBox", "Hyper-V",
-    };
-
-    private static bool IsVirtual(string name)
-    {
-        foreach (var prefix in VirtualPrefixes)
-        {
-            if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Non-loopback, non-virtual interfaces that are up and have an assigned address. Virtual /
-    /// container / bridge interfaces (veth*, docker0, br-*, virbr0, …) are filtered out — see
-    /// <see cref="VirtualPrefixes"/>.
-    /// </summary>
+    /// <summary>Names of all non-loopback interfaces that are up (used by auto-selection).</summary>
     public static IReadOnlyList<string> AvailableInterfaces()
     {
         var result = new List<string>();
@@ -79,8 +45,10 @@ public sealed class NetworkSampler
     public readonly record struct InterfaceInfo(string Name, string Type, string IPv4, string Speed);
 
     /// <summary>
-    /// Available (non-loopback, up, addressed, non-virtual) interfaces with cross-platform display
-    /// details: friendly type (Ethernet/Wi-Fi/…), first IPv4 address, and link speed.
+    /// All non-loopback interfaces that are up, with cross-platform display details: friendly type
+    /// (Ethernet/Wi-Fi/…), first IPv4 address (empty if none), and link speed. No address or virtual/
+    /// container filtering — every up interface is shown (an interface can carry byte counters without
+    /// an IP, and the user may want to watch veth/docker/bridge interfaces too).
     /// </summary>
     public static IReadOnlyList<InterfaceInfo> AvailableInterfaceDetails()
     {
@@ -90,10 +58,6 @@ public sealed class NetworkSampler
             if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback)
                 continue;
             if (ni.OperationalStatus != OperationalStatus.Up)
-                continue;
-            if (!HasUnicastAddress(ni))
-                continue;
-            if (IsVirtual(ni.Name))
                 continue;
             result.Add(new InterfaceInfo(ni.Name, FriendlyType(ni), FirstIPv4(ni), FriendlySpeed(ni)));
         }
@@ -197,18 +161,6 @@ public sealed class NetworkSampler
             }
         }
         return best;
-    }
-
-    private static bool HasUnicastAddress(NetworkInterface ni)
-    {
-        try
-        {
-            return ni.GetIPProperties().UnicastAddresses.Count > 0;
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private static (long rx, long tx) ReadCounters(string interfaceName)
