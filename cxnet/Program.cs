@@ -86,10 +86,6 @@ internal static class Program
         // Register cxnet's palette themes so the 't' theme picker overlay can list/switch them.
         Cxnet.Ui.Themes.RegisterThemes(ws);
 
-        // Keybinding hints live on the desktop's bottom status bar (not inside the window).
-        ws.PanelStateService.BottomStatus =
-            "[dim]q quit · m mode · t themes · n conns · r reset · i iface · b bits · +/- interval[/]";
-
         int intervalMs = opts.RefreshMs > 0 ? opts.RefreshMs : DefaultRefreshMs;
 
         // A --tiny/--mini/--compact flag sets the STARTING mode; a resize still overrides it (flow-style).
@@ -101,6 +97,27 @@ internal static class Program
 
         var monitor = new Cxnet.Ui.MonitorWindow(ws, sampler, state, intervalMs, opts.Bits, initialMode);
         monitor.Show();
+
+        // Clickable keybinding hints on the desktop's bottom panel. Each hint renders its
+        // shortcut in a fixed readable accent (legible on any theme's panel) and its label dim,
+        // and fires the SAME MonitorWindow action the matching key routes through.
+        const string Accent = "#7DD3FC"; // sky-300: bright, readable on the dark bottom panel
+
+        static SharpConsoleUI.Panel.IPanelElement Hint(string key, string label, Action action) =>
+            SharpConsoleUI.Panel.Elements
+                .StatusText($"[{Accent}]{key}[/][grey58] {label}[/]  ")
+                .OnClick(action)
+                .Build();
+
+        ws.BottomPanel?.AddLeft(
+            Hint("q", "quit", () => monitor.Quit()),
+            Hint("m", "mode", () => monitor.CycleMode()),
+            Hint("t", "themes", () => monitor.OpenThemePicker()),
+            Hint("n", "conns", () => monitor.OpenConnections()),
+            Hint("r", "reset", () => monitor.ResetPeaks()),
+            Hint("i", "iface", () => monitor.CycleInterface()),
+            Hint("b", "bits", () => monitor.ToggleUnits()),
+            Hint("+/-", "interval", () => monitor.IncreaseInterval()));
 
         return ws.Run();
     }

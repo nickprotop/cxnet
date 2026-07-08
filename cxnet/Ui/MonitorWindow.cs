@@ -452,7 +452,7 @@ internal sealed class MonitorWindow
         if (key.Key == ConsoleKey.Q ||
             (key.Key == ConsoleKey.C && (key.Modifiers & ConsoleModifiers.Control) != 0))
         {
-            _ws.Shutdown(0);
+            Quit();
             e.Handled = true;
             return;
         }
@@ -460,8 +460,7 @@ internal sealed class MonitorWindow
         switch (char.ToLowerInvariant(key.KeyChar))
         {
             case 'r':
-                _state.ResetPeaks();
-                RefreshStats();
+                ResetPeaks();
                 e.Handled = true;
                 break;
 
@@ -471,47 +470,89 @@ internal sealed class MonitorWindow
                 break;
 
             case 'b':
-                _state.Units = _state.Units == Units.Bytes ? Units.Bits : Units.Bytes;
-                RefreshStats();
+                ToggleUnits();
                 e.Handled = true;
                 break;
 
             case '+':
             case '=': // unshifted '+' key
-                _intervalMs = Math.Clamp(_intervalMs + IntervalStepMs, MinIntervalMs, MaxIntervalMs);
-                RefreshStats();
+                IncreaseInterval();
                 e.Handled = true;
                 break;
 
             case '-':
             case '_':
-                _intervalMs = Math.Clamp(_intervalMs - IntervalStepMs, MinIntervalMs, MaxIntervalMs);
-                RefreshStats();
+                DecreaseInterval();
                 e.Handled = true;
                 break;
 
             // m cycles the display mode manually (Hero → Compact → Mini → Tiny → Hero) and resizes
             // the window to match — a deliberate size choice (applyPlacement: true).
             case 'm':
-                SwitchMode(NextMode(_mode), applyPlacement: true);
+                CycleMode();
                 e.Handled = true;
                 break;
 
             // t → translucent theme picker; n → translucent connections overlay.
             // Both toggle (a second press closes) and composite over the live waveforms.
             case 't':
-                ThemePicker.Show(_ws);
+                OpenThemePicker();
                 e.Handled = true;
                 break;
 
             case 'n':
-                ProcessPanel.Show(_ws);
+                OpenConnections();
                 e.Handled = true;
                 break;
         }
     }
 
-    private void CycleInterface()
+    // ── Hint actions ────────────────────────────────────────────────────────────────
+    // Each maps to a bottom-bar hint AND a keyboard shortcut; the OnKeyPressed cases above
+    // and the clickable Program.cs hints both route through these, so key + click share ONE path.
+
+    /// <summary>Shuts the window system down (q / Ctrl+C).</summary>
+    public void Quit() => _ws.Shutdown(0);
+
+    /// <summary>Resets the peak/total counters and refreshes the stat panel (r).</summary>
+    public void ResetPeaks()
+    {
+        _state.ResetPeaks();
+        RefreshStats();
+    }
+
+    /// <summary>Toggles between bytes/sec and bits/sec display (b).</summary>
+    public void ToggleUnits()
+    {
+        _state.Units = _state.Units == Units.Bytes ? Units.Bits : Units.Bytes;
+        RefreshStats();
+    }
+
+    /// <summary>Increases the sampling interval by one step, clamped to range (+).</summary>
+    public void IncreaseInterval()
+    {
+        _intervalMs = Math.Clamp(_intervalMs + IntervalStepMs, MinIntervalMs, MaxIntervalMs);
+        RefreshStats();
+    }
+
+    /// <summary>Decreases the sampling interval by one step, clamped to range (-).</summary>
+    public void DecreaseInterval()
+    {
+        _intervalMs = Math.Clamp(_intervalMs - IntervalStepMs, MinIntervalMs, MaxIntervalMs);
+        RefreshStats();
+    }
+
+    /// <summary>Cycles the display mode (Hero → Compact → Mini → Tiny → Hero) and resizes to match (m).</summary>
+    public void CycleMode() => SwitchMode(NextMode(_mode), applyPlacement: true);
+
+    /// <summary>Opens the translucent theme picker overlay (t).</summary>
+    public void OpenThemePicker() => ThemePicker.Show(_ws);
+
+    /// <summary>Opens the translucent connections overlay (n).</summary>
+    public void OpenConnections() => ProcessPanel.Show(_ws);
+
+    /// <summary>Advances to the next available network interface (i).</summary>
+    public void CycleInterface()
     {
         var available = NetworkSampler.AvailableInterfaces();
         if (available.Count == 0)
