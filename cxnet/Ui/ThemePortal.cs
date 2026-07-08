@@ -43,6 +43,11 @@ internal static class ThemePortal
             return;
         }
 
+        // A hint click whose portal is open dismisses it on the click's first half; ignore the second
+        // half so it closes rather than close-then-reopen.
+        if (PortalHost.SuppressReopen())
+            return;
+
         // Only one desktop portal open at a time: close any other before opening this one
         // (harmless no-op when none is open).
         PortalHost.CloseAll(ws);
@@ -116,6 +121,7 @@ internal static class ThemePortal
         Action onDismiss = () =>
         {
             _open = null;
+            PortalHost.NotifyDismissed();
             if (!committed && original != null)
                 ws.EnqueueOnUIThread(() => ws.ThemeStateService.SwitchTheme(original));
         };

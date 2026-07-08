@@ -10,6 +10,21 @@ internal static class PortalHost
 {
     private const int AnchorX = 2; // left inset under the hint region
 
+    // A single physical click on a bottom-bar hint arrives as two mouse dispatches: the first
+    // (Button1Pressed, a click OUTSIDE the open portal) dismisses the portal, the second (Button1Clicked)
+    // then reaches the hint and would RE-open it. Record when a portal is dismissed so an Open() from
+    // that same click's second half is suppressed — clicking a hint whose portal is open just closes it.
+    private const double ReopenSuppressMs = 250;
+    private static System.DateTime _lastDismiss = System.DateTime.MinValue;
+
+    /// <summary>Records a portal dismissal (each portal calls this from its OnDismiss).</summary>
+    public static void NotifyDismissed() => _lastDismiss = System.DateTime.UtcNow;
+
+    /// <summary>True if a portal was dismissed within the last <see cref="ReopenSuppressMs"/> ms — i.e.
+    /// an Open() now would be the re-open half of the click that just dismissed it, and should be skipped.</summary>
+    public static bool SuppressReopen() =>
+        (System.DateTime.UtcNow - _lastDismiss).TotalMilliseconds < ReopenSuppressMs;
+
     /// <summary>Upward anchor: a <paramref name="width"/>×<paramref name="height"/> box whose bottom
     /// border sits on the last desktop row directly above the hint bar.</summary>
     public static Rectangle Anchor(ConsoleWindowSystem ws, int width, int height)

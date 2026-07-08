@@ -49,6 +49,10 @@ internal static class ConnectionsPortal
             return;
         }
 
+        // Suppress the re-open half of a hint click that just dismissed this portal.
+        if (PortalHost.SuppressReopen())
+            return;
+
         PortalHost.CloseAll(ws);
 
         var connections = GetConnections();
@@ -101,7 +105,7 @@ internal static class ConnectionsPortal
             Content: content,
             Bounds: rect,
             DismissOnClickOutside: true,
-            OnDismiss: () => _open = null));
+            OnDismiss: () => { _open = null; PortalHost.NotifyDismissed(); }));
     }
 
     /// <summary>
