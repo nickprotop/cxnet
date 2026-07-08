@@ -33,7 +33,7 @@ internal static class ThemePortal
     /// Opens the theme portal overlay. If one is already open it is closed instead (toggle),
     /// so pressing the key again dismisses it.
     /// </summary>
-    public static void Open(ConsoleWindowSystem ws, Func<ConsoleKeyInfo, bool>? shortcutHandler = null)
+    public static void Open(ConsoleWindowSystem ws)
     {
         // Toggle: a second press closes the open portal.
         if (_open != null)
@@ -45,7 +45,7 @@ internal static class ThemePortal
 
         // A hint click whose portal is open dismisses it on the click's first half; ignore the second
         // half so it closes rather than close-then-reopen.
-        if (PortalHost.SuppressReopen())
+        if (PortalHost.SuppressReopen(typeof(ThemePortal)))
             return;
 
         // Only one desktop portal open at a time: close any other before opening this one
@@ -53,10 +53,7 @@ internal static class ThemePortal
         PortalHost.CloseAll(ws);
 
         var names = ws.ThemeRegistryService.GetAvailableThemeNames();
-
-        // Capture the theme active on open so Esc / click-away can revert after live previewing.
-        string? original = ws.ThemeStateService.CurrentTheme?.Name;
-
+        string? current = ws.ThemeStateService.CurrentTheme?.Name;
 
         var listBuilder = Controls.List("Themes")
             .WithName("themelist")
@@ -75,6 +72,16 @@ internal static class ThemePortal
 
         var list = listBuilder.Build();
 
+        // Pre-select the active theme.
+        for (int i = 0; i < names.Count; i++)
+        {
+            if (names[i] == current)
+            {
+                list.SelectedIndex = i;
+                break;
+            }
+        }
+
         // Size to content: height = theme rows + border; width fits `██ ██ ` + the longest name.
         int longestName = 0;
         foreach (var name in names)
@@ -86,52 +93,16 @@ internal static class ThemePortal
         // (opens upward). Bounds is absolute screen-space; DesktopBottomRight.Y is that last row.
         var rect = PortalHost.Anchor(ws, width, height);
 
-        // Wrap the list in a PortalContentBase that draws a rounded border and HOSTS the list — the
-        // framework's supported way to give a desktop portal bordered, laid-out content (a plain
-        // container inside a portal collapses its child; PortalContentBase measures the child tight).
-        var content = new PortalContent(list, rect, PortalHost.Border(ws), PortalHost.Surface(ws), shortcutHandler);
+        // Wrap the list in a PortalContentBase that draws a rounded border and HOSTS the list.
+        var content = new PortalContent(list, rect, PortalHost.Border(ws), PortalHost.Surface(ws));
 
-        // Highlight the currently-active theme FIRST, then subscribe — so setting the initial
-        // selection below does not fire a spurious live preview.
-        for (int i = 0; i < names.Count; i++)
+        // Enter/click applies the selected theme and closes; Esc / click-away just closes (no preview,
+        // no revert). ItemActivated can fire from a click (driver thread), so marshal the switch.
+        list.ItemActivated += (_, item) =>
         {
-            if (names[i] == original)
-            {
-                list.SelectedIndex = i;
-                break;
-            }
-        }
+            if (item?.Tag is string name)
+                ws.EnqueueOnUIThread(() => ws.ThemeStateService.SwitchTheme(name));
 
-        // Live-preview: moving the highlight (arrow keys) recolours the whole monitor.
-        list.SelectedItemChanged += (_, item) =>
-        {
-            if (item?.Tag is string n)
-                ws.ThemeStateService.SwitchTheme(n);
-        };
-
-        // committed distinguishes Enter/click (keep) from Esc/click-away (revert). It MUST be set
-        // true BEFORE RemovePortal in ItemActivated so the OnDismiss callback (fired by the removal)
-        // sees the committed state and skips the revert.
-        bool committed = false;
-
-        // Reverts to the theme active on open unless the user committed. Fires on Esc AND click-outside;
-        // click-outside dispatches on the driver input thread, so marshal the (structural) SwitchTheme
-        // onto the UI thread. Clearing _open is a plain field write — safe on any thread, kept synchronous
-        // so the toggle check never sees a stale reference.
-        Action onDismiss = () =>
-        {
-            _open = null;
-            PortalHost.NotifyDismissed();
-            if (!committed && original != null)
-                ws.EnqueueOnUIThread(() => ws.ThemeStateService.SwitchTheme(original));
-        };
-
-        // Enter/click commits: the previewed theme is already applied, so just close. ItemActivated can
-        // fire from a click (driver thread); RemovePortal → OnDismiss runs the revert-skip, so set
-        // committed first, then remove. RemovePortal is thread-safe (removes from the portal list).
-        list.ItemActivated += (_, _) =>
-        {
-            committed = true;
             var portal = _open;
             _open = null;
             if (portal != null)
@@ -142,6 +113,6 @@ internal static class ThemePortal
             Content: content,
             Bounds: rect,
             DismissOnClickOutside: true,
-            OnDismiss: onDismiss));
+            OnDismiss: () => { _open = null; PortalHost.NotifyDismissed(typeof(ThemePortal)); }));
     }
 }

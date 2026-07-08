@@ -77,6 +77,34 @@ internal sealed class MonitorWindow
         // Re-theme the whole monitor when the active theme changes (graph hues, stat numbers,
         // window background, idle border all resolve from the Palette).
         _ws.ThemeStateService.ThemeChanged += OnThemeChanged;
+
+        RegisterShortcuts();
+    }
+
+    /// <summary>
+    /// Registers cxnet's keys with the framework's GLOBAL key processor so they fire regardless of
+    /// which window is active — and, with the framework's portal-key fall-through, still work while a
+    /// desktop portal is open (a key the portal's list/table doesn't consume reaches these). The
+    /// bottom-bar hint clicks call the same public action methods, so keys and clicks share one path.
+    /// </summary>
+    private void RegisterShortcuts()
+    {
+        void Global(ConsoleKey key, Action action) =>
+            _ws.RegisterGlobalShortcut(ConsoleModifiers.None, key, () => { action(); return true; });
+
+        Global(ConsoleKey.Q, Quit);
+        _ws.RegisterGlobalShortcut(ConsoleModifiers.Control, ConsoleKey.C, () => { Quit(); return true; });
+        Global(ConsoleKey.M, CycleMode);
+        Global(ConsoleKey.T, OpenThemePicker);
+        Global(ConsoleKey.N, OpenConnections);
+        Global(ConsoleKey.R, ResetPeaks);
+        Global(ConsoleKey.I, OpenInterfacePicker);
+        Global(ConsoleKey.B, ToggleUnits);
+        // Interval +/- : register the ConsoleKey variants terminals report for these glyphs.
+        Global(ConsoleKey.OemPlus, IncreaseInterval);
+        Global(ConsoleKey.Add, IncreaseInterval);
+        Global(ConsoleKey.OemMinus, DecreaseInterval);
+        Global(ConsoleKey.Subtract, DecreaseInterval);
     }
 
     private void OnThemeChanged(object? sender, SharpConsoleUI.Core.ThemeChangedEventArgs e)
@@ -122,7 +150,6 @@ internal sealed class MonitorWindow
             .WithBackgroundColor(Palette.Current(_ws).Surface)
             .AddControl(BuildContentFor(_mode))
             .WithAsyncWindowThread(UpdateLoopAsync)
-            .OnKeyPressed(OnKeyPressed)
             .Build();
 
         return window;
@@ -444,47 +471,10 @@ internal sealed class MonitorWindow
         return $"{v:0.0} {units[i]}";
     }
 
-    private void OnKeyPressed(object? sender, KeyPressedEventArgs e)
-    {
-        if (HandleShortcut(e.KeyInfo))
-            e.Handled = true;
-    }
-
-    /// <summary>
-    /// Routes a cxnet shortcut key to its action. Used both by the window's own key handler AND — via
-    /// the portal content's shortcut hook — while a desktop portal is open, so a shortcut still works
-    /// then: the same key toggles its portal closed, a different one switches to the other portal.
-    /// Returns true if the key was a recognised shortcut.
-    /// </summary>
-    public bool HandleShortcut(ConsoleKeyInfo key)
-    {
-        // q or Ctrl+C → quit.
-        if (key.Key == ConsoleKey.Q ||
-            (key.Key == ConsoleKey.C && (key.Modifiers & ConsoleModifiers.Control) != 0))
-        {
-            Quit();
-            return true;
-        }
-
-        switch (char.ToLowerInvariant(key.KeyChar))
-        {
-            case 'r': ResetPeaks(); return true;
-            case 'i': OpenInterfacePicker(); return true;
-            case 'b': ToggleUnits(); return true;
-            case '+':
-            case '=': IncreaseInterval(); return true; // unshifted '+'
-            case '-':
-            case '_': DecreaseInterval(); return true;
-            case 'm': CycleMode(); return true;
-            case 't': OpenThemePicker(); return true;
-            case 'n': OpenConnections(); return true;
-            default: return false;
-        }
-    }
-
     // ── Hint actions ────────────────────────────────────────────────────────────────
-    // Each maps to a bottom-bar hint AND a keyboard shortcut; the OnKeyPressed cases above
-    // and the clickable Program.cs hints both route through these, so key + click share ONE path.
+    // Each maps to a bottom-bar hint AND a global keyboard shortcut (RegisterShortcuts); the
+    // clickable Program.cs hints and the global keys both route through these, so key + click
+    // share ONE path.
 
     /// <summary>Shuts the window system down (q / Ctrl+C).</summary>
     public void Quit() => _ws.Shutdown(0);
@@ -520,15 +510,14 @@ internal sealed class MonitorWindow
     /// <summary>Cycles the display mode (Hero → Compact → Mini → Tiny → Hero) and resizes to match (m).</summary>
     public void CycleMode() => SwitchMode(NextMode(_mode), applyPlacement: true);
 
-    /// <summary>Opens the theme picker portal (t). Passes HandleShortcut so global shortcuts still
-    /// work while it is open (same key closes it, another key switches portals).</summary>
-    public void OpenThemePicker() => ThemePortal.Open(_ws, HandleShortcut);
+    /// <summary>Opens the theme picker portal (t).</summary>
+    public void OpenThemePicker() => ThemePortal.Open(_ws);
 
     /// <summary>Opens the connections portal (n).</summary>
-    public void OpenConnections() => ConnectionsPortal.Open(_ws, HandleShortcut);
+    public void OpenConnections() => ConnectionsPortal.Open(_ws);
 
     /// <summary>Opens the interface-picker portal (i): choose the monitored interface.</summary>
-    public void OpenInterfacePicker() => InterfacePortal.Open(_ws, _sampler, HandleShortcut,
+    public void OpenInterfacePicker() => InterfacePortal.Open(_ws, _sampler,
         onSelected: () => { _state.ResetPeaks(); _state.InterfaceName = _sampler.InterfaceName; RefreshStats(); });
 
     /// <summary>The stat lines appropriate for the current display mode.</summary>

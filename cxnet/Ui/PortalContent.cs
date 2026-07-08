@@ -18,24 +18,26 @@ namespace Cxnet.Ui;
 /// </summary>
 /// <remarks>
 /// Implements <see cref="IInteractiveControl"/> so the framework routes keys here while the portal is
-/// open. A key is first offered to the <c>shortcutHandler</c> (so cxnet's global shortcuts still work
-/// with a portal open — the same key toggles this portal closed, a different one switches portals);
-/// if it declines, the key is forwarded to the hosted content for normal navigation.
+/// open; they are forwarded to the hosted content (list/table) for navigation and type-ahead. Any key
+/// the content does not consume falls through — via the framework's portal-key handling — to the
+/// global shortcut processor, so cxnet's global shortcuts still work with a portal open.
 /// </remarks>
 internal sealed class PortalContent : PortalContentBase, IInteractiveControl
 {
     private readonly Rectangle _bounds;
-    private readonly Func<ConsoleKeyInfo, bool>? _shortcutHandler;
 
-    public PortalContent(IWindowControl content, Rectangle bounds, Color border, Color background,
-        Func<ConsoleKeyInfo, bool>? shortcutHandler = null)
+    public PortalContent(IWindowControl content, Rectangle bounds, Color border, Color background)
     {
         _bounds = bounds;
-        _shortcutHandler = shortcutHandler;
         BorderStyle = BoxChars.Rounded;
         BorderColor = border;
         BorderBackgroundColor = background;
         Content = content; // hosted + painted by PortalContentBase.PaintDOM into the inner (bordered) rect
+
+        // Give the hosted control portal focus so its ProcessKey runs (a focusable control ignores keys
+        // unless HasFocus) — this is what makes arrow nav AND Enter/activation work inside the portal.
+        if (content is IFocusableControl focusable)
+            PortalFocusedControl = focusable;
     }
 
     public override Rectangle GetPortalBounds() => _bounds;
@@ -51,13 +53,8 @@ internal sealed class PortalContent : PortalContentBase, IInteractiveControl
 
     public bool IsEnabled { get; set; } = true;
 
-    public bool ProcessKey(ConsoleKeyInfo key)
-    {
-        // Offer the key to cxnet's shortcut router first (toggle/switch portals while one is open).
-        if (_shortcutHandler is not null && _shortcutHandler(key))
-            return true;
-
-        // Otherwise let the hosted control (list/table) handle navigation.
-        return Content is IInteractiveControl interactive && interactive.ProcessKey(key);
-    }
+    // Forward keys to the hosted control (list/table) for nav and type-ahead. Keys it does not consume
+    // return false, so the framework's portal-key handling falls through to the global shortcuts.
+    public bool ProcessKey(ConsoleKeyInfo key) =>
+        Content is IInteractiveControl interactive && interactive.ProcessKey(key);
 }

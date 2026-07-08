@@ -37,10 +37,10 @@ internal static class ConnectionsPortal
 
     /// <summary>
     /// Opens the connections portal. Toggles: a second call closes it. Only one cxnet portal is open at
-    /// a time (opening this closes any other). <paramref name="shortcutHandler"/> keeps cxnet's global
+    /// a time (opening this closes any other). the framework routes unconsumed portal keys to global
     /// shortcuts working while the portal is open (same key closes it, another switches portals).
     /// </summary>
-    public static void Open(ConsoleWindowSystem ws, Func<ConsoleKeyInfo, bool>? shortcutHandler = null)
+    public static void Open(ConsoleWindowSystem ws)
     {
         if (_open != null)
         {
@@ -50,7 +50,7 @@ internal static class ConnectionsPortal
         }
 
         // Suppress the re-open half of a hint click that just dismissed this portal.
-        if (PortalHost.SuppressReopen())
+        if (PortalHost.SuppressReopen(typeof(ConnectionsPortal)))
             return;
 
         PortalHost.CloseAll(ws);
@@ -99,13 +99,13 @@ internal static class ConnectionsPortal
         int height = Math.Clamp(rowCount + 2, 6, MaxRows + 3);
 
         var rect = PortalHost.Anchor(ws, width, height);
-        var content = new PortalContent(table, rect, PortalHost.Border(ws), PortalHost.Surface(ws), shortcutHandler);
+        var content = new PortalContent(table, rect, PortalHost.Border(ws), PortalHost.Surface(ws));
 
         _open = ws.DesktopPortalService.CreatePortal(new DesktopPortalOptions(
             Content: content,
             Bounds: rect,
             DismissOnClickOutside: true,
-            OnDismiss: () => { _open = null; PortalHost.NotifyDismissed(); }));
+            OnDismiss: () => { _open = null; PortalHost.NotifyDismissed(typeof(ConnectionsPortal)); }));
     }
 
     /// <summary>

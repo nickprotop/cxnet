@@ -25,11 +25,10 @@ internal static class InterfacePortal
     /// <summary>
     /// Opens the interface picker. Toggles: a second call closes it. Only one cxnet portal is open at a
     /// time. On selection, calls <see cref="NetworkSampler.SelectInterface"/> then <paramref name="onSelected"/>
-    /// (used to reset peaks / refresh). <paramref name="shortcutHandler"/> keeps global shortcuts working
-    /// while the portal is open.
+    /// (used to reset peaks / refresh).
     /// </summary>
     public static void Open(ConsoleWindowSystem ws, NetworkSampler sampler,
-        Func<ConsoleKeyInfo, bool>? shortcutHandler, Action onSelected)
+        Action onSelected)
     {
         if (_open != null)
         {
@@ -39,7 +38,7 @@ internal static class InterfacePortal
         }
 
         // Suppress the re-open half of a hint click that just dismissed this portal.
-        if (PortalHost.SuppressReopen())
+        if (PortalHost.SuppressReopen(typeof(InterfacePortal)))
             return;
 
         PortalHost.CloseAll(ws);
@@ -88,12 +87,12 @@ internal static class InterfacePortal
         int height = Math.Max(1, names.Count) + ChromeRows;
 
         var rect = PortalHost.Anchor(ws, width, height);
-        var content = new PortalContent(list, rect, PortalHost.Border(ws), PortalHost.Surface(ws), shortcutHandler);
+        var content = new PortalContent(list, rect, PortalHost.Border(ws), PortalHost.Surface(ws));
 
         _open = ws.DesktopPortalService.CreatePortal(new DesktopPortalOptions(
             Content: content,
             Bounds: rect,
             DismissOnClickOutside: true,
-            OnDismiss: () => { _open = null; PortalHost.NotifyDismissed(); }));
+            OnDismiss: () => { _open = null; PortalHost.NotifyDismissed(typeof(InterfacePortal)); }));
     }
 }
