@@ -61,6 +61,8 @@ internal static class ConnectionsPortal
         var tableBuilder = Controls.Table()
             .WithName("conntable")
             .NoBorder() // PortalContent draws the rounded border — no inner table border
+            .WithColumnSeparator('│', padded: true) // vertical column separators only
+            .StretchHorizontal() // fill the portal width
             .WithVerticalAlignment(SharpConsoleUI.Layout.VerticalAlignment.Fill)
             .AddColumn("Remote", TextJustification.Left, RemoteWidth)
             .AddColumn("State", TextJustification.Left, StateWidth)
@@ -89,15 +91,18 @@ internal static class ConnectionsPortal
         }
 
         var table = tableBuilder.Build();
+        table.TruncationFade = true; // fade clipped cell text instead of a hard cut
 
-        // Size to the visible columns (each + a 1-col gap) plus border; height = rows + header + border,
-        // capped so the table scrolls rather than overflowing.
-        int contentCols = showProcess
-            ? RemoteWidth + 1 + StateWidth + 1 + CountWidth + 1 + ProcessWidth + 1 + PidWidth
-            : RemoteWidth + 1 + StateWidth + 1 + CountWidth;
+        // Size to the visible columns plus padded ' │ ' separators (3 cols each) + border/slack. Height
+        // = rows + header + border, capped so the table scrolls rather than overflowing.
+        int columns = showProcess ? 5 : 3;
+        int colWidthSum = showProcess
+            ? RemoteWidth + StateWidth + CountWidth + ProcessWidth + PidWidth
+            : RemoteWidth + StateWidth + CountWidth;
+        int contentCols = colWidthSum + (columns - 1) * 3; // padded separators
         int width = contentCols + 4; // border + slack
         int rowCount = (connections.Count == 0 ? 1 : connections.Count) + 1; // + header
-        int height = Math.Clamp(rowCount + 2, 6, MaxRows + 3);
+        int height = Math.Clamp(rowCount + 3, 6, MaxRows + 4); // border(2) + header(1)
 
         var rect = PortalHost.Anchor(ws, width, height);
         var content = new PortalContent(table, rect, PortalHost.Border(ws), PortalHost.Surface(ws));
